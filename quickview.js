@@ -1,16 +1,11 @@
 // Vue rapide de l'agenda : bibliothèque, sans effet de bord au chargement.
-// `boot.js` décide quand la monter. Le popup peut aussi l'ouvrir à distance.
-//
-// Rien n'est écrit dans le DOM de la page : chaque surface vit dans son propre
-// Shadow DOM accroché à <html>, hors du conteneur React. Shotgun peut donc
-// rendre et re-rendre ce qu'il veut sans effacer l'interface.
+// `boot.js` décide quand la monter. Chaque surface est un Shadow DOM accroché
+// à <html>, pour qu'aucun style ne fuie dans un sens ni dans l'autre.
 (() => {
-  // Estampille de version. Recharger l'extension pendant qu'un onglet est
-  // ouvert laisse dans la page l'état de la version précédente : ses objets
-  // n'ont pas forcément la même forme, et un garde qui se contenterait de
-  // constater leur présence appellerait des méthodes qui n'existent plus.
-  // À version différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.4.3';
+  // Estampille de version : un rechargement d'extension laisse dans la page
+  // l'état de la version d'avant, dont la forme peut différer. À version
+  // différente, on démonte tout et on repart de zéro.
+  const VERSION = '1.5.0';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -21,9 +16,7 @@
   }
   if (SG && SG.quickView) return;
 
-  // Surfaces orphelines : celles d'une version dont le `teardown` a échoué ou
-  // n'existait pas. Sans ce nettoyage, un panneau plein écran resterait posé
-  // sur la page sans plus rien pour le fermer.
+  // Surfaces orphelines d'une version dont le teardown a échoué ou manquait.
   for (const stale of document.querySelectorAll('[data-sg], [data-shotgun-quick-view]')) {
     stale.remove();
   }
@@ -34,9 +27,7 @@
 
   /* ------------------------------------------------------------- charte */
 
-  // Relevé sur shotgun.live (août 2026) : variables CSS du site, styles
-  // calculés des boutons de filtre, des intertitres de journée et des
-  // étiquettes de genre.
+  // Relevé sur shotgun.live : variables CSS et styles calculés du site.
   SG.TOKENS = `
 :host { all: initial; }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -87,6 +78,7 @@ button { cursor: pointer; background: none; border: none; }
     list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
     grid: ['M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M3 14h7v7H3z', 'M14 14h7v7h-7z'],
     plus: ['M12 5v14', 'M5 12h14'],
+    minus: ['M5 12h14'],
     close: ['M18 6 6 18', 'm6 6 12 12'],
     search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z', 'm21 21-4.3-4.3'],
     copy: ['M9 9h10v12H9z', 'M5 15H4V3h12v1'],
@@ -143,9 +135,8 @@ button { cursor: pointer; background: none; border: none; }
     return null;
   }
 
-  // Le prix est un <span> sans classe, voisin des <time>. Le lire sur le texte
-  // complet de la carte collerait l'heure au montant : « 23:59 » suivi de
-  // « 26,00 € » se lit alors « 23:5926,00 € ».
+  // Prix : un <span> sans classe. Le lire sur le texte entier de la carte
+  // collerait l'heure au montant : « 23:59 » + « 26,00 € » = « 23:5926,00 € ».
   function readPrice(card) {
     const spans = [...card.querySelectorAll('span')].filter((s) => !s.children.length);
     for (let i = spans.length - 1; i >= 0; i--) {
@@ -172,9 +163,8 @@ button { cursor: pointer; background: none; border: none; }
     return out;
   }
 
-  // Le mot est cherché sur un élément qui ne contient que lui : « complet »
-  // apparaît aussi dans des titres de soirée, et un titre ne doit pas faire
-  // disparaître le prix.
+  // Cherché sur un élément qui ne contient que lui : « complet » apparaît aussi
+  // dans des titres de soirée.
   const SOLD_OUT_RE = /^(complet|sold\s?out|épuisé|esgotado)$/i;
 
   function isSoldOut(card) {
@@ -202,9 +192,8 @@ button { cursor: pointer; background: none; border: none; }
     return {
       href,
       title,
-      // Shotgun affiche ici le nom de la salle, ou la ville quand le lieu
-      // n'est pas divulgué. Le « | » qui sépare date et heure porte la même
-      // classe et doit être écarté.
+      // Nom de salle, ou ville si le lieu n'est pas divulgué. Le « | » séparateur
+      // porte la même classe et doit être écarté.
       venue: firstLeaf(card, '[class*="text-muted-foreground"]', /^[|·—-]$/),
       start,
       price,
@@ -217,10 +206,8 @@ button { cursor: pointer; background: none; border: none; }
   }
 
   function parseDoc(doc) {
-    // « Épinglé » reprend en tête des événements présents plus bas dans la
-    // page, mais sous une forme promotionnelle : le titre y est remplacé par
-    // l'accroche de l'organisateur et la salle n'est pas affichée. À slug
-    // égal, on garde donc la carte qui porte un nom de salle.
+    // « Épinglé » reprend les mêmes événements sans salle ni vrai titre : à slug
+    // égal, on garde la carte qui porte un nom de salle.
     const byHref = new Map();
     for (const card of doc.querySelectorAll(CARD_SELECTOR)) {
       const ev = readCard(card);
@@ -235,18 +222,12 @@ button { cursor: pointer; background: none; border: none; }
 
   /* ------------------------------------------------- chargement complet */
 
-  // Une page ville n'affiche que les deux jours suivants ; `?page=N` renvoie
-  // en une seule requête tout l'agenda jusqu'à N jours en avant. Au-delà d'une
-  // trentaine de jours la réponse sature : elle contient déjà l'agenda entier.
-  //
-  // Cette requête ne part qu'à l'ouverture de la vue, jamais au chargement de
-  // la page : personne n'a demandé 2,5 Mo pour une ville qu'on ne fait que
-  // traverser.
+  // Une page ville n'affiche que deux jours ; ?page=N renvoie tout l'agenda.
+  // Demandé à l'ouverture de la vue, jamais au chargement de la page.
   const CITY_RE = /^\/[^/]+\/cities\/([^/?#]+)/;
   const FULL_PAGE = 30;
 
-  // Sur l'accueil, aucune ville n'est imposée : la sélection démarre vide et se
-  // compose au sélecteur.
+  // Sur l'accueil, la sélection de villes démarre vide.
   const HOME_RE = /^\/(?:[a-z]{2}(?:-[a-z]{2})?)?\/?$/i;
 
   const locale = () => {
@@ -265,9 +246,7 @@ button { cursor: pointer; background: none; border: none; }
     return new DOMParser().parseFromString(await r.text(), 'text/html');
   }
 
-  // Agenda complet d'une ville. Les cartes ne portent pas le nom de la ville :
-  // il vient du slug demandé, seule source fiable quand on en mélange
-  // plusieurs.
+  // Le nom de la ville vient du slug demandé : les cartes ne le portent pas.
   async function loadCity(slug, name) {
     const events = parseDoc(await fetchDoc('/' + locale() + '/cities/' + slug + '?page=' + FULL_PAGE));
     for (const ev of events) {
@@ -279,8 +258,7 @@ button { cursor: pointer; background: none; border: none; }
 
   /* --------------------------------------------------- index des villes */
 
-  // 171 villes en août 2026, avec leur nombre d'événements. Gardé une journée :
-  // l'index bouge lentement, et le picker doit s'ouvrir sans attendre.
+  // Index des villes, gardé une journée : il bouge lentement.
   const CITIES_KEY = 'citiesIndex';
   const CITIES_TTL_MS = 24 * 60 * 60 * 1000;
   const COUNT_RE = /^(.*?)([\d][\d\s  ]*)\s*(?:évènements?|events?|eventos?)$/i;
@@ -325,10 +303,7 @@ button { cursor: pointer; background: none; border: none; }
     return citiesPromise;
   }
 
-  // La sélection n'est pas mémorisée d'une ouverture à l'autre : elle part de
-  // la ville qu'on regarde, et d'elle seule. Restaurer un choix précédent
-  // ferait apparaître Paris et Lyon sur une page marseillaise sans que rien ne
-  // l'ait demandé. À l'utilisateur d'ajouter ce qu'il veut ensuite.
+  // Pas de sélection mémorisée : on part de la ville regardée, et d'elle seule.
   const startingPick = () => (citySlug() ? [citySlug()] : []);
 
   /* ------------------------------------------------------------- filtres */
@@ -347,8 +322,7 @@ button { cursor: pointer; background: none; border: none; }
     return x;
   }
 
-  // Une soirée qui commence à 1 h du matin appartient à la nuit de la veille :
-  // « ce soir » couvre donc jusqu'à 6 h le lendemain.
+  // Une soirée à 1 h appartient à la nuit de la veille : « ce soir » va à 6 h.
   const NIGHT_END_H = 6;
   const DAY = 86400000;
 
@@ -544,9 +518,8 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       picker: false
     };
 
-    // Le sélecteur de villes vaut sur une page de ville comme sur l'accueil.
-    // Sur une salle, un artiste ou un festival, la page porte déjà sa propre
-    // liste : on la lit telle quelle.
+    // Sélecteur de villes sur page de ville et accueil ; ailleurs la page porte
+    // déjà sa propre liste.
     const cityMode = Boolean(citySlug()) || isHome();
 
     const { host, root } = SG.surface('quick-view', VIEW_CSS);
@@ -590,9 +563,8 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       if (state.hideSold && ev.soldOut) return false;
 
       if (!skipPrice && state.maxPrice !== null) {
-        // Un événement sans prix affiché ne peut ni satisfaire ni contredire un
-        // plafond. Il sort du lot, et `paint` dit combien sont écartés pour
-        // cette raison : sans ce compte, ils disparaîtraient sans explication.
+        // Sans prix affiché, un événement sort du lot : leur nombre est affiché à
+        // côté du curseur plutôt que de disparaître en silence.
         if (ev.price === null) return false;
         if (state.maxPrice === 0 ? ev.price !== 0 : ev.price > state.maxPrice) return false;
       }
@@ -604,8 +576,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
 
       if (state.q) {
         const hay = (ev.title + ' ' + (ev.venue || '') + ' ' + ev.genres.join(' ')).toLowerCase();
-        // Chaque mot doit être présent : « baby techno » trouve la soirée
-        // techno au Baby Club sans exiger l'ordre des mots.
+        // Chaque mot doit être présent, dans n'importe quel ordre.
         if (!state.q.split(/\s+/).every((w) => hay.includes(w))) return false;
       }
 
@@ -614,8 +585,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
 
     function visible() {
       const out = state.all.filter(matches);
-      // Les événements sans prix affiché n'ont pas de place naturelle dans un
-      // tri par prix : ils passent en fin de liste.
+      // Sans prix, pas de place naturelle dans un tri par prix : en fin de liste.
       if (state.sort === 'price') {
         out.sort((a, b) => (a.price === null) - (b.price === null) ||
           (a.price - b.price) || (a.start - b.start));
@@ -647,9 +617,8 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       return seg;
     }
 
-    // Borne du curseur, tirée de l'agenda chargé. Le maximum brut collerait la
-    // quasi-totalité des soirées dans le premier quart de la course dès qu'un
-    // billet à 200 € traîne : on s'arrête au 95e centile, arrondi à 5 €.
+    // Borne au 95e centile, arrondie à 5 € : le maximum brut tasserait tout le
+    // reste dès qu'un billet cher traîne.
     function priceCap() {
       const prices = state.all.map((e) => e.price).filter((p) => p !== null).sort((a, b) => a - b);
       if (!prices.length) return 50;
@@ -666,8 +635,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       input.min = '0';
       input.max = String(cap);
       input.step = '1';
-      // La position haute vaut « tout prix » : un curseur est toujours quelque
-      // part, il lui faut donc une case pour ne rien filtrer du tout.
+      // Position haute = aucun filtre : un curseur est toujours quelque part.
       input.value = String(state.maxPrice === null ? cap : state.maxPrice);
       input.title = 'Prix maximum. À fond à droite, aucun filtre.';
 
@@ -699,8 +667,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       return box;
     }
 
-    // Une ville retenue : son nom, son décompte quand elle est arrivée, et de
-    // quoi la retirer. La ville de la page n'a pas de croix.
+    // La ville de la page n'a pas de croix : elle ne peut pas être retirée.
     function cityChip(slug, info) {
       const st = state.cityState.get(slug);
       const b = el('button', 'citychip' + (st === 'erreur' ? ' err' : ''));
@@ -724,9 +691,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       for (const slug of state.picked) {
         box.appendChild(cityChip(slug, state.cityIndex && state.cityIndex.get(slug)));
       }
-      // Ouvert, le bouton n'invite plus à ajouter : il devient la sortie. Sans
-      // ça, « + Ville » reste affiché sous une liste déjà dépliée et rien ne
-      // dit comment la refermer.
+      // Ouvert, le bouton devient la sortie plutôt qu'une invitation à ajouter.
       const open = state.picker;
       const add = el('button', 'citychip add' + (open ? ' on' : ''));
       add.appendChild(icon(open ? 'close' : 'plus'));
@@ -737,9 +702,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       return box;
     }
 
-    // Liste déroulante maison : 171 villes, donc un champ de recherche et un
-    // classement par nombre d'événements plutôt qu'un ordre alphabétique où
-    // les grandes villes se perdent.
+    // 171 villes : recherche, et classement par nombre d'événements.
     function buildPicker() {
       pickerBox.replaceChildren();
       if (!state.picker) { pickerBox.style.display = 'none'; return; }
@@ -769,8 +732,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
           b.appendChild(el('span', 'nm', c.name));
           b.appendChild(el('span', 'ct', c.count === null ? '' : c.count + ' évts'));
           b.addEventListener('click', () => {
-            // Choisir une ville referme la liste : elle a fait son travail.
-            // La décocher, non — on en retire souvent plusieurs d'affilée.
+            // Choisir referme la liste ; décocher non, on en retire souvent plusieurs.
             if (!on) state.picker = false;
             pick(c.slug, !on);
             buildToolbar();
@@ -824,9 +786,8 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
         { value: 'grid', label: 'Affiches', icon: 'grid' }
       ], state.view, (v) => { state.view = v; paint(); })));
 
-      // Les genres sont ceux réellement présents dans l'agenda chargé, classés
-      // par fréquence : proposer une taxonomie figée afficherait des filtres
-      // qui ne renvoient rien.
+      // Genres réellement présents dans l'agenda, par fréquence : une taxonomie
+      // figée afficherait des filtres qui ne renvoient rien.
       const freq = new Map();
       for (const ev of state.all) {
         for (const g of ev.genres) freq.set(g, (freq.get(g) || 0) + 1);
@@ -901,12 +862,10 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       repaintList();
     }
 
-    // Le curseur de prix ne repasse pas par `paint` : reconstruire la barre
-    // sous les doigts remplacerait le curseur en cours de glissement, et le
-    // relâcherait.
+    // Le curseur ne repasse pas par paint : reconstruire la barre sous les doigts
+    // le relâcherait.
     function repaintList() {
-      // Un filtre modifié alors qu'aucune ville n'est retenue ne doit pas
-      // faire croire à une recherche infructueuse.
+      // Aucune ville retenue : ce n'est pas une recherche infructueuse.
       if (cityMode && !state.picked.length) { invite(); return; }
 
       const list = visible();
@@ -917,8 +876,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       count.textContent = list.length + ' / ' + state.all.length + ' événements' +
         (pending ? ' · ' + pending + ' ville' + (pending > 1 ? 's' : '') + ' en cours…' : '');
 
-      // Rien encore reçu et des villes en route : c'est un chargement, pas une
-      // recherche infructueuse.
+      // Villes en route : c'est un chargement, pas une recherche infructueuse.
       if (!state.all.length && pending) { loading(); return; }
 
       main.replaceChildren();
@@ -931,8 +889,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
         return;
       }
 
-      // Le tri par prix casse la chronologie : les intertitres de journée
-      // n'auraient plus de sens, on les omet dans ce cas.
+      // Le tri par prix casse la chronologie : pas d'intertitres de journée.
       if (state.sort !== 'date') {
         const box = el('div', state.view === 'grid' ? 'grid' : '');
         for (const ev of list) box.appendChild(rowFor(ev));
@@ -985,8 +942,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
 
     function onKey(e) {
       if (e.key === 'Escape') {
-        // Échap referme d'abord la liste des villes : fermer tout l'agenda
-        // parce qu'on renonce à ajouter une ville serait brutal.
+        // Échap referme d'abord la liste des villes, pas tout l'agenda.
         if (state.picker) { state.picker = false; buildToolbar(); return; }
         hide();
         return;
@@ -1011,8 +967,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
 
     close.addEventListener('click', () => hide());
 
-    // Le compteur n'est pas touché ici : pendant un chargement multi-villes il
-    // porte déjà « … · 2 villes en cours… », plus informatif qu'un « Chargement ».
+    // Le compteur n'est pas touché : il porte déjà l'avancement des villes.
     function loading() {
       const s = el('div', null);
       for (let i = 0; i < 8; i++) s.appendChild(el('div', 'skel'));
@@ -1054,8 +1009,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       onHide = (opts && opts.onHide) || null;
       savedOverflow = document.documentElement.style.overflow;
       document.documentElement.style.overflow = 'hidden';
-      // Même point d'accrochage que les autres surfaces, pour que tout se
-      // retire et se surveille au même endroit.
+      // Même point d'accrochage que les autres surfaces.
       if (!host.isConnected) document.documentElement.appendChild(host);
       host.style.display = '';
       document.addEventListener('keydown', onKey, true);
@@ -1067,8 +1021,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       loading();
 
       if (!cityMode) {
-        // Page de salle, d'artiste ou de festival : tout est déjà rendu, il
-        // n'y a ni agenda complet à demander ni ville à mélanger.
+        // Salle, artiste, festival : la page porte déjà sa liste.
         try {
           state.all = SG.parseDoc(document);
           state.all.length ? paint() : empty();
@@ -1080,15 +1033,12 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       reload().catch(fail);
     }
 
-    // Une ville pèse 2,5 Mo et deux secondes. Les charger toutes avant
-    // d'afficher quoi que ce soit ferait un écran figé de dix secondes sur
-    // cinq villes : on fond et on redessine au fur et à mesure, deux requêtes
-    // de front.
+    // Une ville pèse 2,5 Mo : on fusionne et redessine au fil de l'eau, deux
+    // requêtes de front, plutôt qu'un écran figé de dix secondes.
     const CONCURRENCY = 2;
 
     async function reload() {
-      // Sélection vide : l'agenda n'est pas introuvable, il n'est pas encore
-      // demandé. Le dire, et ouvrir la porte.
+      // Sélection vide : l'agenda n'est pas introuvable, il n'est pas demandé.
       if (!state.picked.length) {
         state.cityState = new Map();
         state.all = [];
@@ -1139,9 +1089,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
     function pick(slug, on) {
       const next = state.picked.filter((s) => s !== slug);
       if (on) next.push(slug);
-      // Sur une page de ville, celle-ci reste toujours dans la sélection : la
-      // retirer laisserait un agenda sans rapport avec la page regardée. Sur
-      // l'accueil il n'y en a pas, et la sélection peut redevenir vide.
+      // La ville de la page reste dans la sélection ; sur l'accueil, il n'y en a pas.
       const current = citySlug();
       if (current && !next.includes(current)) next.unshift(current);
       state.picked = next;

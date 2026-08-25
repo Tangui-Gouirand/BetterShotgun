@@ -1,10 +1,7 @@
 'use strict';
 
-// Roue de secours. L'interface vit dans la page, posée par le script de
-// contenu déclaré au manifeste. Chrome n'injecte ce script qu'au chargement
-// d'un document : un onglet ouvert avant l'installation, ou avant un
-// rechargement de l'extension, n'a donc rien. C'est le seul cas que ce popup
-// traite.
+// Roue de secours. L'interface vit dans la page ; Chrome n'y injecte ses
+// scripts qu'au chargement d'un document, donc pas dans un onglet déjà ouvert.
 
 const msg = document.getElementById('msg');
 const FILES = ['quickview.js', 'event.js', 'boot.js'];
@@ -48,8 +45,7 @@ if (!tab || !tab.id || !/^https:\/\/shotgun\.live\//.test(tab.url || '')) {
     return;
   }
 
-  // La version estampillée par les bibliothèques sert de preuve de présence :
-  // un objet vide laissé par une version morte ne la porte pas.
+  // La version estampillée sert de preuve de présence.
   let live = false;
   try {
     const frames = await chrome.scripting.executeScript({

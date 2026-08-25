@@ -1,18 +1,28 @@
 {
   "manifest_version": 3,
   "name": "BetterShotgun BÊTA",
-  "version": "1.4.3",
+  "version": "1.5.0",
   "description": "Tout l'agenda de plusieurs villes Shotgun, filtrable, et le lieu exact de chaque soirée. CETTE EXTENSION EST POUR LES TESTS BÊTA",
   "minimum_chrome_version": "102",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
   "host_permissions": [
     "https://shotgun.live/*",
     "https://nominatim.openstreetmap.org/*"
   ],
   "content_scripts": [
     {
-      "matches": ["https://shotgun.live/*"],
-      "js": ["quickview.js", "event.js", "boot.js"],
+      "matches": [
+        "https://shotgun.live/*"
+      ],
+      "js": [
+        "quickview.js",
+        "event.js",
+        "boot.js"
+      ],
       "run_at": "document_idle"
     }
   ],

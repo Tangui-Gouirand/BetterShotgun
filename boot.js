@@ -1,12 +1,6 @@
-// Script de contenu déclaré : c'est lui qui décide quoi afficher, et quand.
-//
-// Shotgun est une application à navigation côté client. Chrome n'injecte un
-// script de contenu qu'au chargement d'un document, jamais lors d'un
-// changement de route interne , d'où un `matches` sur tout le site, et un
-// aiguillage fait ici, à partir du chemin.
-//
-// Rien n'est inséré dans le DOM que React possède : chaque surface est un
-// Shadow DOM accroché à <html>.
+// Script de contenu déclaré : décide quoi afficher, selon le chemin.
+// `matches` couvre tout le site parce que Chrome n'injecte qu'au chargement
+// d'un document, et Shotgun change de route sans en recharger un.
 (() => {
   const SG = window.__sg;
   if (!SG || !SG.quickView || SG.booted) return;
@@ -17,8 +11,8 @@
 
   const EVENT_RE = /^\/[^/]+\/events\/[^/]+/;
   const LIST_RE = /^\/[^/]+\/(cities|venues|artists|festivals|search)(?:[/?#]|$)/;
-  // Accueil : « / », « /fr », « /pt-BR ». L'agenda y part d'une sélection vide,
-  // à composer soi-même.
+  const LOCALE_RE = /^[a-z]{2}(-[a-z]{2})?$/i;
+  // Accueil : « / », « /fr », « /pt-BR ». Sélection de villes vide au départ.
   const HOME_RE = /^\/(?:[a-z]{2}(?:-[a-z]{2})?)?\/?$/i;
 
   function kindOf(path) {
@@ -33,9 +27,7 @@
   const NOMINATIM_MIN_INTERVAL_MS = 1100; // politique d'usage Nominatim : 1 req/s max
   const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours
 
-  // Nominatim interdit d'envoyer plus d'une requête par seconde et demande de
-  // mettre en cache. Le User-Agent n'est pas modifiable depuis fetch(), ces
-  // deux mesures sont donc les seules applicables ici.
+  // Nominatim : une requête par seconde au plus, et cache obligatoire.
   async function throttle() {
     const KEY = 'nominatimLastCall';
     let last = 0;
@@ -43,8 +35,7 @@
       last = (await chrome.storage.local.get(KEY))[KEY] || 0;
     } catch (e) { /* storage indisponible : on continue sans throttle */ }
 
-    // Une horloge reculée (changement d'heure système) donnerait une attente
-    // absurde : on borne au maximum à l'intervalle nominal.
+    // Horloge reculée : on borne à l'intervalle nominal.
     const wait = Math.min(last + NOMINATIM_MIN_INTERVAL_MS - Date.now(), NOMINATIM_MIN_INTERVAL_MS);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
 
@@ -131,6 +122,21 @@
 .addr { color: var(--muted); font-size: 14px; margin-top: 3px; word-break: break-word; }
 .note { color: var(--muted); font-size: 13px; line-height: 1.45; margin-top: 10px;
   border-left: 2px solid var(--accent); padding-left: 10px; }
+.mapbox { position: relative; margin-top: 12px; }
+.map { display: block; width: 100%; height: auto;
+  border: 1px solid var(--line); border-radius: var(--rb); background: var(--fill); }
+/* En haut : l'attribution Google occupe le bas et doit rester lisible. */
+.zoom { position: absolute; right: 8px; top: 8px; display: flex; align-items: center;
+  gap: 2px; padding: 2px; background: rgba(28, 28, 28, .9);
+  border: 1px solid var(--line); border-radius: var(--rb); }
+.zoom button { width: 26px; height: 26px; display: grid; place-items: center;
+  border-radius: 2px; color: var(--fg); }
+.zoom button:hover:not(:disabled) { background: var(--fill); }
+.zoom button:disabled { opacity: .35; cursor: default; }
+.zoom .icon { width: 14px; height: 14px; }
+.zoom .lvl { min-width: 26px; text-align: center; font-size: 11px; font-weight: 700;
+  color: var(--muted); font-variant-numeric: tabular-nums; }
+.mapcap { color: var(--muted); font-size: 11px; line-height: 1.4; margin-top: 6px; }
 .coord { display: flex; align-items: center; gap: 8px; margin-top: 12px;
   background: var(--fill); border-radius: var(--rb); padding: 8px 8px 8px 12px; }
 .coord code { flex: 1; font: 500 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
@@ -148,12 +154,63 @@
 .osm { color: var(--muted); font-size: 12.5px; line-height: 1.45; margin-top: 10px; }
 `;
 
+  // Sur un lieu non divulgué, Shotgun affiche sa carte à zoom 11, sans
+  // libellés et floutée par CSS. Le flou est cosmétique : la coordonnée est en
+  // clair dans les données de la page, et c'est elle qu'on redemande au même
+  // service, lisible. Rien n'est extrait de plus — seulement rendu.
+  const ZOOM_MIN = 9;
+  const ZOOM_MAX = 18;
+  const ZOOM_DEFAULT = 15;
+
+  function mapImage(res) {
+    const seg = location.pathname.split('/')[1] || '';
+    const url = (zoom) => '/api/maps/static?' + new URLSearchParams({
+      lat: String(res.lat),
+      lng: String(res.lon),
+      zoom: String(zoom),
+      width: '330',
+      height: '180',
+      marker: 'true',
+      hidden: 'false',
+      locale: LOCALE_RE.test(seg) ? seg : 'fr'
+    }).toString();
+
+    const box = el('div', 'mapbox');
+    const img = document.createElement('img');
+    img.className = 'map';
+    img.loading = 'lazy';
+    img.alt = '';
+
+    let zoom = ZOOM_DEFAULT;
+    const ctrl = el('div', 'zoom');
+    const out = el('button');
+    out.appendChild(icon('minus'));
+    out.title = 'Dézoomer';
+    const lvl = el('div', 'lvl');
+    const inn = el('button');
+    inn.appendChild(icon('plus'));
+    inn.title = 'Zoomer';
+
+    function apply() {
+      img.src = url(zoom);
+      lvl.textContent = 'z' + zoom;
+      out.disabled = zoom <= ZOOM_MIN;
+      inn.disabled = zoom >= ZOOM_MAX;
+    }
+    out.addEventListener('click', () => { zoom = Math.max(ZOOM_MIN, zoom - 1); apply(); });
+    inn.addEventListener('click', () => { zoom = Math.min(ZOOM_MAX, zoom + 1); apply(); });
+
+    apply();
+    ctrl.append(out, lvl, inn);
+    box.append(img, ctrl);
+    return box;
+  }
+
   function buildCard(res) {
     const { host, root } = SG.surface('venue-card', CARD_CSS);
     const card = el('div', 'sg card');
 
-    // Bouton réduit, à la place exacte de la carte repliée. Toujours le
-    // repère de carte : le bouton dit où cliquer, pas ce qu'on y trouvera.
+    // Bouton réduit, à la place exacte de la carte repliée.
     const tab = el('button', 'sg tab');
     tab.title = res.secret ? 'Afficher le lieu secret' : 'Afficher le lieu';
     tab.appendChild(icon('pin'));
@@ -186,12 +243,17 @@
         res.cityCentroid
           ? 'Shotgun ne publie pas l’adresse. Les coordonnées ci-dessous sont le ' +
             'centre-ville de référence : elles ne disent rien du lieu réel.'
-          : 'Shotgun ne publie pas l’adresse. Les coordonnées ci-dessous sont un ' +
-            'point générique de la ville, pas celui de la soirée.'));
+          : 'Shotgun ne publie pas l’adresse, mais il publie ce point. La carte ' +
+            'de la page le montre flouté et dézoomé ; le voici lisible.'));
+
+      // Un centre-ville de référence n'apprend rien : pas de carte dans ce cas.
+      if (!res.cityCentroid) {
+        card.appendChild(mapImage(res));
+        card.appendChild(el('div', 'mapcap',
+          'Point publié par Shotgun, pas une adresse confirmée.'));
+      }
     } else if (res.venue) {
-      // Sur un lieu public, la page affiche déjà le nom de la salle et
-      // l'adresse complète. Les répéter masquerait du contenu pour rien : la
-      // carte se limite à ce qui manque, les coordonnées et les liens.
+      // La page affiche déjà salle et adresse : on ne montre que ce qui manque.
       card.appendChild(el('div', 'venue-sm', res.venue));
     }
 
@@ -225,10 +287,8 @@
     maps.append(icon('pin'), el('span', null, 'Maps'));
     acts.appendChild(maps);
 
-    // Le géocodage inverse n'a de sens que sur des coordonnées réelles : sur un
-    // point générique il renverrait une adresse plausible mais inventée. Il
-    // part sur demande, jamais tout seul : c'est la seule requête de
-    // l'extension vers un tiers.
+    // Sur un point générique, l'adresse renvoyée serait inventée. Sur demande
+    // seulement : c'est la seule requête vers un tiers.
     if (!res.secret) {
       const check = el('button', 'btn', 'Vérifier (OSM)');
       check.addEventListener('click', async () => {
@@ -262,8 +322,7 @@
           card.appendChild(q);
         }
 
-        // Les liens sont reconstruits à partir du seul identifiant validé côté
-        // extraction, jamais d'une URL brute lue dans la page.
+        // Liens reconstruits depuis l'identifiant validé, jamais une URL brute.
         const chans = el('div', 'acts');
         if (g.telegram) {
           const a = el('a', 'btn');
@@ -313,9 +372,7 @@
 
   /* -------------------------------------------------------- montage */
 
-  // Journal en mémoire, sans écrire dans la console. Une surface qui apparaît
-  // puis disparaît ne laisse aucune trace autrement : `window.__sg.trace` dit
-  // qui a monté, qui a démonté, et sur quel chemin.
+  // Journal en mémoire, lisible via `window.__sg.trace`.
   const trace = [];
   const started = performance.now();
 
@@ -334,26 +391,16 @@
     note('unmount', { surfaces: mounted.length });
     clearTimeout(retry);
     retry = null;
-    // Vidé avant le retrait : le gardien ci-dessous ne réattache que ce qui
-    // est censé être monté, et un démontage volontaire n'en fait plus partie.
+    // Vidé avant le retrait : le réattacheur ignore un démontage volontaire.
     const hosts = mounted;
     mounted = [];
     for (const h of hosts) h.remove();
     if (view) { view.destroy(); view = null; }
   }
 
-  // Shotgun est en Next.js App Router : React hydrate `document` lui-même, et
-  // <html> est un nœud qu'il réconcilie. Un enfant ajouté à <html> avant la fin
-  // de l'hydratation est un intrus à ses yeux, et il le retire — la carte
-  // s'affichait puis disparaissait sur tout chargement complet de page.
-  //
-  // Deux protections. D'abord attendre que la page soit posée avant de monter.
-  //
-  // `requestAnimationFrame` laisse React finir son commit, mais il ne
-  // s'exécute pas dans un onglet d'arrière-plan — et un événement ouvert
-  // depuis l'agenda arrive justement dans un onglet neuf, pas toujours au
-  // premier plan. Un minuteur prend donc le relais, et un second garde-fou
-  // couvre le cas où `load` ne viendrait jamais.
+  // React (App Router) hydrate `document` et retire les enfants de <html>
+  // qu'il ne connaît pas : on attend que la page soit posée pour monter.
+  // rAF ne s'exécute pas dans un onglet d'arrière-plan, d'où les minuteurs.
   function whenSettled(fn) {
     let done = false;
     const once = (why) => {
@@ -371,15 +418,11 @@
     setTimeout(() => once('garde-fou'), 4000);
   }
 
-  // Ensuite réattacher ce que la page retirerait quand même. Plafonné : si
-  // quelque chose retire nos surfaces en boucle, mieux vaut abandonner que
-  // lutter image par image.
+  // Réattache ce qui serait retiré malgré tout, plafonné pour ne pas boucler.
   const MAX_HEALS = 5;
   let heals = 0;
 
-  // Toutes nos surfaces vivent au même endroit, et c'est ce même endroit qui
-  // est surveillé. Les accrocher à <body> tout en surveillant <html> revenait
-  // à ne rien surveiller du tout : le retrait passait inaperçu.
+  // Un seul point d'accrochage, et c'est lui qu'on surveille.
   const ANCHOR = () => document.documentElement;
 
   const healer = new MutationObserver((records) => {
@@ -392,9 +435,8 @@
           return;
         }
         note('surface retirée, réattachée');
-        // À l'image suivante : ce rappel s'exécute pendant la phase de
-        // rendu de React, et réinsérer dans un nœud qu'il est en train de
-        // réconcilier le ferait retirer aussitôt.
+        // À l'image suivante : réinsérer pendant le rendu de React le ferait
+        // retirer aussitôt.
         requestAnimationFrame(() => ANCHOR().appendChild(n));
       }
     }
@@ -410,9 +452,8 @@
     mounted.push(launcher);
   }
 
-  // Après une navigation côté client, React réécrit le JSON-LD de la page.
-  // S'il n'est pas encore là, on repasse : trois essais suffisent, et l'absence
-  // définitive de données n'affiche rien plutôt qu'une carte vide.
+  // Le JSON-LD peut arriver après une navigation côté client : trois essais,
+  // puis rien plutôt qu'une carte vide.
   function mountEvent(attempt = 0) {
     const res = SG.readEvent();
     if (!res || !res.found) {
@@ -427,9 +468,7 @@
   }
 
   function mount() {
-    // Le plafond de réattachement vaut par montage, pas pour la durée de vie
-    // de l'onglet : cinq incidents étalés sur une session de navigation ne
-    // doivent pas couper la protection pour de bon.
+    // Plafond par montage, pas pour la durée de vie de l'onglet.
     heals = 0;
     const kind = kindOf(location.pathname);
     note('mount', { kind: kind || 'aucun' });
@@ -439,10 +478,8 @@
 
   /* ------------------------------------------------------ navigation */
 
-  // Un script de contenu vit dans un monde isolé : il ne peut pas surveiller
-  // le `history.pushState` que la page appelle dans le sien, et `popstate` ne
-  // couvre que les boutons précédent/suivant. Une navigation modifie forcément
-  // le DOM : c'est ce signal-là qu'on écoute.
+  // Un monde isolé ne voit pas le `history.pushState` de la page, et
+  // `popstate` ne couvre que précédent/suivant : on écoute le DOM.
   let lastPath = location.pathname;
   let timer = null;
 
@@ -458,8 +495,7 @@
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
-  // Les deux nœuds sont surveillés : React réconcilie <html> comme <body>, et
-  // une surface peut se faire retirer de l'un ou de l'autre.
+  // React réconcilie <html> comme <body>.
   healer.observe(document.documentElement, { childList: true });
   healer.observe(document.body, { childList: true });
   note('démarrage', { readyState: document.readyState, version: SG.version });
@@ -468,9 +504,7 @@
   // Lecture du journal depuis la console : window.__sg.trace
   SG.trace = trace;
 
-  // Appelé par la version suivante quand l'extension est rechargée sous un
-  // onglet déjà ouvert : sans cela, l'observateur de cette version-ci
-  // continuerait de tourner et de monter des surfaces en concurrence.
+  // Appelé par la version suivante après un rechargement de l'extension.
   SG.teardown = () => {
     observer.disconnect();
     healer.disconnect();

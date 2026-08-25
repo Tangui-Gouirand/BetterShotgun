@@ -1,6 +1,5 @@
-// Lecture du lieu d'une page d'événement, à partir des données structurées
-// que le serveur envoie déjà à chaque visiteur. Bibliothèque : aucun effet de
-// bord au chargement.
+// Lit le lieu d'une page d'événement dans les données structurées de la page.
+// Bibliothèque : aucun effet de bord au chargement.
 (() => {
   const SG = (window.__sg = window.__sg || {});
   if (SG.readEvent) return;
@@ -24,8 +23,8 @@
 
   const str = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
 
-  // Parcours récursif : selon la page le bloc utile est dans un tableau, sous
-  // @graph, ou imbriqué. On cherche n'importe quel nœud portant un `geo` valide.
+  // Le bloc utile peut être dans un tableau, sous @graph ou imbriqué : on cherche
+  // n'importe quel nœud portant un `geo` valide.
   function findGeo(node, depth = 0) {
     if (!node || typeof node !== 'object' || depth > 12) return null;
 
@@ -82,24 +81,17 @@
     return null;
   }
 
-  // Détection du cas « Lieu secret ».
-  //
-  // Vérifié sur 254 événements Shotgun (août 2026) : les 245 événements publics
-  // portent tous une `streetAddress` complète, et les 9 événements affichés
-  // « Lieu secret à <Ville> » n'en ont aucune , leur `location.name` vaut le nom
-  // de la ville et leurs coordonnées sont un point générique, identique d'un
-  // événement à l'autre dans une même ville.
-  //
-  // L'absence de `streetAddress` est donc le signal fiable ; le nom de lieu égal
-  // à la ville le confirme.
+  // Lieu secret. Sur 254 événements relevés, les 245 publics ont tous une
+  // `streetAddress` et les 9 secrets aucune : son absence est le signal fiable,
+  // un nom de lieu égal à la ville le confirme.
   function isSecret(geo) {
     if (!geo.street) return true;
     if (geo.venue && geo.city && geo.venue.toLowerCase() === geo.city.toLowerCase()) return true;
     return false;
   }
 
-  // Centres-villes génériques repérés sur les événements secrets. Y tomber
-  // pile signifie que la coordonnée ne porte aucune information sur le lieu.
+  // Centres-villes génériques : y tomber pile signifie que la coordonnée
+  // n'apprend rien.
   const CITY_CENTROIDS = [
     [52.520008, 13.404954],  // Berlin
     [51.509865, -0.118092],  // Londres
@@ -124,8 +116,8 @@
 
   /* ------------------------------------------- description de l'événement */
 
-  // La description JSON-LD du nœud Event : c'est là que les organisateurs
-  // écrivent en clair comment l'adresse sera communiquée.
+  // La description du nœud Event : les organisateurs y écrivent en clair comment
+  // l'adresse sera communiquée.
   function findDescription(node, depth = 0) {
     if (!node || typeof node !== 'object' || depth > 12) return null;
     if (Array.isArray(node)) {
@@ -156,23 +148,20 @@
 
   /* ----------------------------------- canal de révélation et indices */
 
-  // Mots-clés relevés sur les descriptions réelles d'événements « Lieu secret ».
-  // `meeting point` exige un deux-points : employé seul il sert surtout de
-  // métaphore (« a meeting point between rave culture and community »).
+  // `meeting point` exige un deux-points : seul, il sert surtout de métaphore
+  // (« a meeting point between rave culture and community »).
   const RX_REVEAL = /will be (announced|revealed|shared|sent|given)|revealed to|announced on|communiqu[ée]|annonc[ée]|d[ée]voil[ée]|envoy[ée] (par|aux)|adresse .{0,25}(donn|transmis|communiqu|envoy)|meeting point\s*[:：]|point de rendez-vous\s*[:：]/i;
   const RX_TRANSIT = /\b(U-?Bahn|S-?Bahn|tram(?:way)?|m[ée]tro|bus|station|arr[êe]t|stop|ligne \d|line \d|quartier|district|nearest)\b/i;
 
-  // Une ligne du type « Nearest tram stop: » porte sa valeur sur la ligne
-  // suivante : on recolle les deux, sinon l'indice est vide.
+  // « Nearest tram stop: » porte sa valeur sur la ligne suivante.
   function lineWithValue(lines, i) {
     const line = lines[i];
     if (/[:：]\s*$/.test(line) && lines[i + 1]) return line + ' ' + lines[i + 1];
     return line;
   }
 
-  // Fenêtre centrée sur le motif trouvé. Couper depuis le début de la ligne
-  // perdrait justement l'information utile : dans « … le lieu restera secret et
-  // ne sera dévoilé qu'une semaine avant », tout se joue au caractère 120.
+  // Fenêtre centrée sur le motif : couper depuis le début de la ligne perdrait
+  // l'information utile, souvent située loin dans la phrase.
   function snippet(line, rx, before = 50, after = 110) {
     const text = line.replace(/\s+/g, ' ').trim();
     const m = text.match(rx);
@@ -187,20 +176,18 @@
     const empty = { telegram: null, instagram: null, notes: [], hints: [] };
     if (!description) return empty;
 
-    // La description est du texte, mais on retire toute balise éventuelle
-    // pour ne pas afficher de fragments de balisage.
+    // Toute balise est retirée : pas de fragment de balisage à l'écran.
     const text = description.replace(/<[^>]*>/g, ' ');
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
-    // Liens reconstruits à partir du seul identifiant capturé : on n'utilise
-    // jamais une URL brute issue de la page comme href.
+    // Liens reconstruits depuis l'identifiant capturé, jamais une URL brute.
     const tg = text.match(/t\.me\/([A-Za-z0-9_+][A-Za-z0-9_+\-]{2,31})/i);
     const ig = text.match(/instagram\.com\/([A-Za-z0-9_][A-Za-z0-9_.]{1,29})/i);
 
     let instagram = ig ? ig[1] : null;
     if (!instagram) {
-      // « @pseudo » n'est retenu que si la ligne parle bien d'Instagram :
-      // isolé, ce motif attrape surtout des horaires et des e-mails.
+      // « @pseudo » seulement si la ligne parle d'Instagram : isolé, ce motif
+      // attrape surtout des horaires et des e-mails.
       for (const l of lines) {
         if (!/instagram|insta\b|\bIG\b/i.test(l)) continue;
         const m = l.match(/@([A-Za-z0-9_][A-Za-z0-9_.]{2,29})/);
