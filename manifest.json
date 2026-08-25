@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "BetterShotgun BÊTA",
-  "version": "1.4.0",
-  "description": "Le lieu d'un événement Shotgun et l'agenda complet d'une ville, dans la page. CETTE EXTENSION EST POUR LES TESTS BÊTA",
+  "version": "1.4.1",
+  "description": "Tout l'agenda de plusieurs villes Shotgun, filtrable, et le lieu exact de chaque soirée. CETTE EXTENSION EST POUR LES TESTS BÊTA",
   "minimum_chrome_version": "102",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [

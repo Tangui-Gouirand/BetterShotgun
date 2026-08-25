@@ -10,7 +10,7 @@
   // n'ont pas forcément la même forme, et un garde qui se contenterait de
   // constater leur présence appellerait des méthodes qui n'existent plus.
   // À version différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.4.0';
+  const VERSION = '1.4.1';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -245,11 +245,19 @@ button { cursor: pointer; background: none; border: none; }
   const CITY_RE = /^\/[^/]+\/cities\/([^/?#]+)/;
   const FULL_PAGE = 30;
 
-  const locale = () => (location.pathname.split('/')[1] || 'fr');
+  // Sur l'accueil, aucune ville n'est imposée : la sélection démarre vide et se
+  // compose au sélecteur.
+  const HOME_RE = /^\/(?:[a-z]{2}(?:-[a-z]{2})?)?\/?$/i;
+
+  const locale = () => {
+    const seg = location.pathname.split('/')[1] || '';
+    return /^[a-z]{2}(-[a-z]{2})?$/i.test(seg) ? seg : 'fr';
+  };
   const citySlug = () => {
     const m = location.pathname.match(CITY_RE);
     return m ? m[1] : null;
   };
+  const isHome = () => HOME_RE.test(location.pathname);
 
   async function fetchDoc(path) {
     const r = await fetch(path, { credentials: 'same-origin', headers: { Accept: 'text/html' } });
@@ -317,24 +325,11 @@ button { cursor: pointer; background: none; border: none; }
     return citiesPromise;
   }
 
-  // Villes retenues d'une session à l'autre. Restaurées seulement si la
-  // sélection contient la ville de la page : arriver sur Lyon et voir Paris
-  // serait déroutant.
-  const PICK_KEY = 'citiesPicked';
-
-  async function restorePick(current) {
-    try {
-      const saved = (await chrome.storage.local.get(PICK_KEY))[PICK_KEY];
-      if (Array.isArray(saved) && saved.includes(current)) return saved;
-    } catch (e) { /* pas de cache disponible */ }
-    return [current];
-  }
-
-  function savePick(slugs) {
-    try {
-      chrome.storage.local.set({ [PICK_KEY]: slugs });
-    } catch (e) { /* non bloquant */ }
-  }
+  // La sélection n'est pas mémorisée d'une ouverture à l'autre : elle part de
+  // la ville qu'on regarde, et d'elle seule. Restaurer un choix précédent
+  // ferait apparaître Paris et Lyon sur une page marseillaise sans que rien ne
+  // l'ait demandé. À l'utilisateur d'ajouter ce qu'il veut ensuite.
+  const startingPick = () => (citySlug() ? [citySlug()] : []);
 
   /* ------------------------------------------------------------- filtres */
 
@@ -549,7 +544,10 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       picker: false
     };
 
-    const onCityPage = Boolean(citySlug());
+    // Le sélecteur de villes vaut sur une page de ville comme sur l'accueil.
+    // Sur une salle, un artiste ou un festival, la page porte déjà sa propre
+    // liste : on la lit telle quelle.
+    const cityMode = Boolean(citySlug()) || isHome();
 
     const { host, root } = SG.surface('quick-view', VIEW_CSS);
     const wrap = el('div', 'sg wrap');
@@ -779,7 +777,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
     function buildToolbar() {
       rowWhen.replaceChildren();
 
-      if (onCityPage) {
+      if (cityMode) {
         rowCities.style.display = '';
         rowCities.replaceChildren();
         rowCities.appendChild(el('span', 'grp-lbl', 'Villes'));
@@ -896,6 +894,10 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
     // sous les doigts remplacerait le curseur en cours de glissement, et le
     // relâcherait.
     function repaintList() {
+      // Un filtre modifié alors qu'aucune ville n'est retenue ne doit pas
+      // faire croire à une recherche infructueuse.
+      if (cityMode && !state.picked.length) { invite(); return; }
+
       const list = visible();
       state.cursor = -1;
 
@@ -1000,6 +1002,18 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       main.replaceChildren(s);
     }
 
+    function invite() {
+      count.textContent = 'Aucune ville sélectionnée';
+      const s = el('div', 'state');
+      s.appendChild(el('div', null,
+        'Choisis une ou plusieurs villes pour composer ton agenda.'));
+      s.appendChild(chip('Choisir une ville', false, () => {
+        state.picker = true;
+        buildToolbar();
+      }, true));
+      main.replaceChildren(s);
+    }
+
     function empty() {
       count.textContent = '';
       const s = el('div', 'state');
@@ -1033,7 +1047,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       count.textContent = 'Chargement…';
       loading();
 
-      if (!onCityPage) {
+      if (!cityMode) {
         // Page de salle, d'artiste ou de festival : tout est déjà rendu, il
         // n'y a ni agenda complet à demander ni ville à mélanger.
         try {
@@ -1043,10 +1057,8 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
         return;
       }
 
-      restorePick(citySlug()).then((slugs) => {
-        state.picked = slugs;
-        return reload();
-      }).catch(fail);
+      state.picked = startingPick();
+      reload().catch(fail);
     }
 
     // Une ville pèse 2,5 Mo et deux secondes. Les charger toutes avant
@@ -1056,6 +1068,16 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
     const CONCURRENCY = 2;
 
     async function reload() {
+      // Sélection vide : l'agenda n'est pas introuvable, il n'est pas encore
+      // demandé. Le dire, et ouvrir la porte.
+      if (!state.picked.length) {
+        state.cityState = new Map();
+        state.all = [];
+        buildToolbar();
+        invite();
+        return;
+      }
+
       const merged = new Map();
       const queue = state.picked.slice();
 
@@ -1098,11 +1120,12 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
     function pick(slug, on) {
       const next = state.picked.filter((s) => s !== slug);
       if (on) next.push(slug);
-      // La ville de la page reste toujours dans la sélection : la retirer
-      // laisserait un agenda sans rapport avec la page qu'on regarde.
-      if (!next.includes(citySlug())) next.unshift(citySlug());
+      // Sur une page de ville, celle-ci reste toujours dans la sélection : la
+      // retirer laisserait un agenda sans rapport avec la page regardée. Sur
+      // l'accueil il n'y en a pas, et la sélection peut redevenir vide.
+      const current = citySlug();
+      if (current && !next.includes(current)) next.unshift(current);
       state.picked = next;
-      savePick(next);
       reload().catch(fail);
     }
 

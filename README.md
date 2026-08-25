@@ -15,13 +15,16 @@ par mail le jour J »).
 
 La croix replie la carte sur un petit bouton, au même endroit, qui la rouvre.
 
-**Sur une page de ville, de salle ou d'artiste**, un bouton **Agenda complet**
-en bas à droite. Une page ville n'affiche que douze événements sur deux jours et
-ne charge rien quand tu fais défiler ; ce bouton récupère l'agenda entier en une
-requête et l'affiche en liste dense :
+**Sur l'accueil et sur une page de ville, de salle ou d'artiste**, un bouton
+**Agenda complet** en bas à droite. Une page ville n'affiche que douze
+événements sur deux jours et ne charge rien quand tu fais défiler ; ce bouton
+récupère l'agenda entier en une requête et l'affiche en liste dense :
 
+- **plusieurs villes à la fois** : l'agenda s'ouvre sur la ville de la page, et
+  sur l'accueil il s'ouvre vide, à toi de composer. Les villes s'ajoutent au
+  sélecteur et se chargent au fur et à mesure, sans attendre les autres ;
 - recherche instantanée sur le titre, la salle et le genre ;
-- filtres ce soir / demain / week-end / 7 jours, et par prix ;
+- filtres ce soir / demain / week-end / 7 jours, et un curseur de prix ;
 - les douze genres les plus présents, cumulables ;
 - tri par date ou par prix, liste dense ou grille d'affiches ;
 - au clavier : `/` chercher, `↑` `↓` parcourir, `Entrée` ouvrir, `Échap` fermer.

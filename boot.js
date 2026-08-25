@@ -17,10 +17,13 @@
 
   const EVENT_RE = /^\/[^/]+\/events\/[^/]+/;
   const LIST_RE = /^\/[^/]+\/(cities|venues|artists|festivals|search)(?:[/?#]|$)/;
+  // Accueil : « / », « /fr », « /pt-BR ». L'agenda y part d'une sélection vide,
+  // à composer soi-même.
+  const HOME_RE = /^\/(?:[a-z]{2}(?:-[a-z]{2})?)?\/?$/i;
 
   function kindOf(path) {
     if (EVENT_RE.test(path)) return 'event';
-    if (LIST_RE.test(path)) return 'list';
+    if (LIST_RE.test(path) || HOME_RE.test(path)) return 'list';
     return null;
   }
 
