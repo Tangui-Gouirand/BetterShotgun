@@ -3,6 +3,8 @@
 const out = document.getElementById('out');
 
 const EVENT_URL_RE = /^https:\/\/shotgun\.live\/[^/]+\/events\/[^/]+/;
+// Pages listant des événements : ville, salle, artiste, festival, recherche.
+const LIST_URL_RE = /^https:\/\/shotgun\.live\/[^/]+\/(cities|venues|artists|festivals|search)(?:[/?#]|$)/;
 const NOMINATIM_TIMEOUT_MS = 8000;
 const NOMINATIM_MIN_INTERVAL_MS = 1100; // politique d'usage Nominatim : 1 req/s max
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours
@@ -131,6 +133,17 @@ function addButton(href, label, iconId, kind, trailing) {
   if (trailing) a.appendChild(el('span', 'chan', trailing));
   a.appendChild(icon('i-ext'));
   out.appendChild(a);
+}
+
+// Variante bouton pour les actions qui s'exécutent dans l'onglet plutôt que
+// d'ouvrir un lien.
+function addActionButton(label, iconId, kind, onClick) {
+  const b = el('button', 'btn btn-' + kind);
+  b.appendChild(icon(iconId));
+  b.appendChild(el('span', null, label));
+  b.addEventListener('click', onClick);
+  out.appendChild(b);
+  return b;
 }
 
 function addMapLink(lat, lon) {
@@ -327,13 +340,58 @@ async function renderPublic(res) {
   }
 }
 
+/* --------------------------------------------------- vue rapide (listes) */
+
+// Sur une page de ville, Shotgun ne charge que les deux jours suivants et
+// impose de faire défiler des affiches pleine largeur. La vue rapide charge
+// l'agenda entier en une requête et le rend filtrable au clavier.
+function renderLauncher(tabId) {
+  clear();
+
+  addPill('Page de liste', 'is-public');
+  addTitle('Vue rapide');
+
+  addCallout('info',
+    'Charge tout l’agenda de cette page en une fois et l’affiche en liste ' +
+    'dense : recherche instantanée, filtres par date, prix et genre, tri par ' +
+    'prix, navigation au clavier.');
+
+  const btn = addActionButton('Ouvrir la vue rapide', 'i-grid', 'primary', async () => {
+    btn.disabled = true;
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['browse.js'] });
+      window.close();
+    } catch (e) {
+      btn.disabled = false;
+      addCallout('warn', 'Injection impossible. Recharge la page puis réessaie.');
+    }
+  });
+
+  addSectionTitle('Raccourcis', 'i-compass');
+  addQuotes('Dans la vue rapide', [
+    '/ — rechercher',
+    '↑ ↓ (ou j / k) — parcourir, Entrée — ouvrir',
+    'Échap — fermer'
+  ]);
+}
+
 /* ------------------------------------------------------------------- flux */
 
 async function run() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const url = (tab && tab.url) || '';
 
-  if (!tab || !tab.id || !EVENT_URL_RE.test(tab.url || '')) {
-    showMessage('Ouvre une page d’événement Shotgun pour utiliser l’extension.', 'i-pin');
+  if (!tab || !tab.id || !/^https:\/\/shotgun\.live\//.test(url)) {
+    showMessage('Ouvre une page Shotgun pour utiliser l’extension.', 'i-pin');
+    return;
+  }
+
+  if (!EVENT_URL_RE.test(url)) {
+    if (LIST_URL_RE.test(url)) {
+      renderLauncher(tab.id);
+      return;
+    }
+    showMessage('Ouvre une page d’événement, de ville, de salle ou d’artiste.', 'i-pin');
     return;
   }
 

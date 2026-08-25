@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Shotgun - Révélateur de lieu",
-  "version": "1.1.0",
-  "description": "Affiche les coordonnées et l'adresse publiées dans les données de la page d'un événement Shotgun, et signale les lieux non divulgués.",
+  "version": "1.2.0",
+  "description": "Affiche l'adresse publiée d'un événement Shotgun, signale les lieux non divulgués, et ajoute une vue rapide filtrable de l'agenda d'une ville.",
   "minimum_chrome_version": "102",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
@@ -16,7 +16,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "Révéler le lieu",
+    "default_title": "Lieu de l'événement · vue rapide de l'agenda",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
