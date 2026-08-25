@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Shotgun - Révélateur de lieu",
+  "name": "BetterShotgun",
   "version": "1.3.3",
   "description": "Affiche le lieu d'un événement Shotgun directement dans la page, signale les lieux non divulgués, et ouvre l'agenda complet d'une ville en liste filtrable.",
   "minimum_chrome_version": "102",

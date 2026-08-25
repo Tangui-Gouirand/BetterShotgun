@@ -341,7 +341,7 @@
       launcher.style.display = 'none';
       view.show({ onHide: () => { launcher.style.display = ''; } });
     });
-    document.documentElement.appendChild(launcher);
+    document.body.appendChild(launcher);
     mounted.push(launcher);
   }
 
@@ -356,7 +356,7 @@
       return;
     }
     const card = buildCard(res);
-    document.documentElement.appendChild(card);
+    document.body.appendChild(card);
     mounted.push(card);
     note('carte montée', { attempt, secret: res.secret });
   }
@@ -390,7 +390,7 @@
 
   observer.observe(document.body, { childList: true, subtree: true });
   note('démarrage', { readyState: document.readyState, version: SG.version });
-  mount();
+  setTimeout(mount, 800);
 
   // Lecture du journal depuis la console : window.__sg.trace
   SG.trace = trace;
