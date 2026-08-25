@@ -1,4 +1,4 @@
-# Shotgun · Révélateur de lieu
+# Shotgun
 
 Extension Chrome pour [shotgun.live](https://shotgun.live).
 
