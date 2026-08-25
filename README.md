@@ -1,4 +1,4 @@
-# Shotgun
+# BetterShotgun
 
 Extension Chrome pour [shotgun.live](https://shotgun.live). Elle travaille dans
 la page : rien à cliquer dans la barre d'outils.
