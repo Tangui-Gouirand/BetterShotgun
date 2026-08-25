@@ -10,7 +10,7 @@
   // n'ont pas forcément la même forme, et un garde qui se contenterait de
   // constater leur présence appellerait des méthodes qui n'existent plus.
   // À version différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.3.3';
+  const VERSION = '1.3.4';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {

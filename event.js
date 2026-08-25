@@ -86,7 +86,7 @@
   //
   // Vérifié sur 254 événements Shotgun (août 2026) : les 245 événements publics
   // portent tous une `streetAddress` complète, et les 9 événements affichés
-  // « Lieu secret à <Ville> » n'en ont aucune — leur `location.name` vaut le nom
+  // « Lieu secret à <Ville> » n'en ont aucune , leur `location.name` vaut le nom
   // de la ville et leurs coordonnées sont un point générique, identique d'un
   // événement à l'autre dans une même ville.
   //

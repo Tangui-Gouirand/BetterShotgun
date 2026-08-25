@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "BetterShotgun",
-  "version": "1.3.3",
-  "description": "Affiche le lieu d'un événement Shotgun directement dans la page, signale les lieux non divulgués, et ouvre l'agenda complet d'une ville en liste filtrable.",
+  "name": "BetterShotgun BÊTA",
+  "version": "1.3.4",
+  "description": "Le lieu d'un événement Shotgun et l'agenda complet d'une ville, dans la page. CETTE EXTENSION EST POUR LES TESTS BÊTA",
   "minimum_chrome_version": "102",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [

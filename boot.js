@@ -2,7 +2,7 @@
 //
 // Shotgun est une application à navigation côté client. Chrome n'injecte un
 // script de contenu qu'au chargement d'un document, jamais lors d'un
-// changement de route interne — d'où un `matches` sur tout le site, et un
+// changement de route interne , d'où un `matches` sur tout le site, et un
 // aiguillage fait ici, à partir du chemin.
 //
 // Rien n'est inséré dans le DOM que React possède : chaque surface est un
@@ -331,10 +331,49 @@
     note('unmount', { surfaces: mounted.length });
     clearTimeout(retry);
     retry = null;
-    for (const h of mounted) h.remove();
+    // Vidé avant le retrait : le gardien ci-dessous ne réattache que ce qui
+    // est censé être monté, et un démontage volontaire n'en fait plus partie.
+    const hosts = mounted;
     mounted = [];
+    for (const h of hosts) h.remove();
     if (view) { view.destroy(); view = null; }
   }
+
+  // Shotgun est en Next.js App Router : React hydrate `document` lui-même, et
+  // <html> est un nœud qu'il réconcilie. Un enfant ajouté à <html> avant la fin
+  // de l'hydratation est un intrus à ses yeux, et il le retire — la carte
+  // s'affichait puis disparaissait sur tout chargement complet de page.
+  //
+  // Deux protections. D'abord attendre que la page soit posée avant de monter.
+  function whenSettled(fn) {
+    const go = () => requestAnimationFrame(() => requestAnimationFrame(fn));
+    if (document.readyState === 'complete') go();
+    else window.addEventListener('load', go, { once: true });
+  }
+
+  // Ensuite réattacher ce que la page retirerait quand même. Plafonné : si
+  // quelque chose retire nos surfaces en boucle, mieux vaut abandonner que
+  // lutter image par image.
+  const MAX_HEALS = 5;
+  let heals = 0;
+
+  const healer = new MutationObserver((records) => {
+    for (const r of records) {
+      for (const n of r.removedNodes) {
+        if (!mounted.includes(n)) continue;
+        if (++heals > MAX_HEALS) {
+          note('réattachement abandonné');
+          healer.disconnect();
+          return;
+        }
+        note('surface retirée, réattachée');
+        // À l'image suivante : ce rappel s'exécute pendant la phase de
+        // rendu de React, et réinsérer dans un nœud qu'il est en train de
+        // réconcilier le ferait retirer aussitôt.
+        requestAnimationFrame(() => document.documentElement.appendChild(n));
+      }
+    }
+  });
 
   function mountList() {
     view = SG.quickView.create();
@@ -363,6 +402,10 @@
   }
 
   function mount() {
+    // Le plafond de réattachement vaut par montage, pas pour la durée de vie
+    // de l'onglet : cinq incidents étalés sur une session de navigation ne
+    // doivent pas couper la protection pour de bon.
+    heals = 0;
     const kind = kindOf(location.pathname);
     note('mount', { kind: kind || 'aucun' });
     if (kind === 'event') mountEvent();
@@ -390,8 +433,9 @@
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+  healer.observe(document.documentElement, { childList: true });
   note('démarrage', { readyState: document.readyState, version: SG.version });
-  setTimeout(mount, 800);
+  whenSettled(mount);
 
   // Lecture du journal depuis la console : window.__sg.trace
   SG.trace = trace;
@@ -401,6 +445,7 @@
   // continuerait de tourner et de monter des surfaces en concurrence.
   SG.teardown = () => {
     observer.disconnect();
+    healer.disconnect();
     clearTimeout(timer);
     unmount();
     if (window.__sg === SG) delete window.__sg;
