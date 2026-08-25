@@ -10,7 +10,7 @@
   // n'ont pas forcément la même forme, et un garde qui se contenterait de
   // constater leur présence appellerait des méthodes qui n'existent plus.
   // À version différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.4.1';
+  const VERSION = '1.4.2';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -724,10 +724,15 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       for (const slug of state.picked) {
         box.appendChild(cityChip(slug, state.cityIndex && state.cityIndex.get(slug)));
       }
-      const add = el('button', 'citychip add' + (state.picker ? ' on' : ''));
-      add.appendChild(icon('plus'));
-      add.appendChild(el('span', null, 'Ville'));
-      add.addEventListener('click', () => { state.picker = !state.picker; buildToolbar(); });
+      // Ouvert, le bouton n'invite plus à ajouter : il devient la sortie. Sans
+      // ça, « + Ville » reste affiché sous une liste déjà dépliée et rien ne
+      // dit comment la refermer.
+      const open = state.picker;
+      const add = el('button', 'citychip add' + (open ? ' on' : ''));
+      add.appendChild(icon(open ? 'close' : 'plus'));
+      add.appendChild(el('span', null, open ? 'Fermer' : 'Ville'));
+      add.title = open ? 'Fermer la liste des villes' : 'Ajouter une ville';
+      add.addEventListener('click', () => { state.picker = !open; buildToolbar(); });
       box.appendChild(add);
       return box;
     }
@@ -763,7 +768,13 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
           const b = el('button', 'pick-row' + (on ? ' on' : ''));
           b.appendChild(el('span', 'nm', c.name));
           b.appendChild(el('span', 'ct', c.count === null ? '' : c.count + ' évts'));
-          b.addEventListener('click', () => { pick(c.slug, !on); buildToolbar(); });
+          b.addEventListener('click', () => {
+            // Choisir une ville referme la liste : elle a fait son travail.
+            // La décocher, non — on en retire souvent plusieurs d'affilée.
+            if (!on) state.picker = false;
+            pick(c.slug, !on);
+            buildToolbar();
+          });
           list.appendChild(b);
         }
       }
@@ -973,7 +984,13 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
     }
 
     function onKey(e) {
-      if (e.key === 'Escape') { hide(); return; }
+      if (e.key === 'Escape') {
+        // Échap referme d'abord la liste des villes : fermer tout l'agenda
+        // parce qu'on renonce à ajouter une ville serait brutal.
+        if (state.picker) { state.picker = false; buildToolbar(); return; }
+        hide();
+        return;
+      }
       if (e.key === '/' && root.activeElement !== search) {
         e.preventDefault();
         search.focus();
