@@ -52,7 +52,8 @@ Baby Club, la carte annonce 5,99 € alors que le palier suivant est à 9,99 €
 ## Utilisation · lieu d'un événement
 
 Ouvre une page d'événement (`https://shotgun.live/<langue>/events/<slug>`). La
-carte apparaît seule, en bas à gauche. La croix la referme.
+carte apparaît seule, en bas à gauche. La croix la replie sur un bouton carré,
+au même endroit, qui la rouvre.
 
 **Lieu public.** Shotgun affiche déjà la salle et l'adresse : la carte ne les
 répète pas. Elle ajoute ce qui manque, les coordonnées avec bouton de copie et
@@ -119,7 +120,7 @@ machine et ne contient que des couples « coordonnées → adresse ».
 | `event.js` | Lit le JSON-LD d'une page d'événement, en extrait le lieu, détecte les lieux non divulgués |
 | `quickview.js` | Charte graphique, lecture des cartes de liste, construction de l'agenda |
 | `boot.js` | Décide quoi afficher selon le chemin, suit les changements de page, dessine la carte lieu et le bouton |
-| `popup.js` / `popup.html` | Le popup de secours |
+| `popup.js` / `popup.html` | Dit si l'interface tourne dans l'onglet, et l'y met sinon. Rien d'autre |
 
 Chaque surface vit dans son propre Shadow DOM accroché à `<html>`, hors du
 conteneur React. Shotgun peut donc rendre et re-rendre ce qu'il veut sans
@@ -130,7 +131,7 @@ l'autre.
 
 **Rien n'apparaît dans la page** : l'onglet était ouvert avant l'installation,
 Chrome n'y a donc injecté aucun script. Recharge la page. Le popup de
-l'extension fait le travail en attendant.
+l'extension le confirme et propose **Activer dans cette page** pour cette fois.
 
 **Une erreur dans la console après avoir rechargé l'extension** : recharge
 aussi les onglets Shotgun ouverts. Chrome y laisse les scripts de la version

@@ -111,6 +111,16 @@
 .x:hover { background: var(--fill); color: var(--fg); }
 .x .icon { width: 15px; height: 15px; color: currentColor; }
 
+/* Repli de la carte : fermer ne la fait pas disparaître, sinon il faudrait
+   recharger la page pour la revoir. */
+.tab { position: fixed; left: 20px; bottom: 20px; z-index: 2147483645;
+  width: 44px; height: 44px; border-radius: var(--r);
+  background: var(--bg); border: 1px solid var(--line);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .5);
+  display: grid; place-items: center; color: var(--accent); }
+.tab:hover { border-color: var(--accent); background: #232323; }
+.tab .icon { width: 20px; height: 20px; }
+
 .venue { font-size: 17px; font-weight: 700; line-height: 1.25; }
 .venue-sm { color: var(--muted); font-size: 13px; line-height: 1.3;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -134,19 +144,34 @@
 .osm { color: var(--muted); font-size: 12.5px; line-height: 1.45; margin-top: 10px; }
 `;
 
-  function buildCard(res, onClose) {
+  function buildCard(res) {
     const { host, root } = SG.surface('venue-card', CARD_CSS);
     const card = el('div', 'sg card');
-    root.appendChild(card);
+
+    // Bouton réduit, à la place exacte de la carte repliée. Toujours le
+    // repère de carte : le bouton dit où cliquer, pas ce qu'on y trouvera.
+    const tab = el('button', 'sg tab');
+    tab.title = res.secret ? 'Afficher le lieu secret' : 'Afficher le lieu';
+    tab.appendChild(icon('pin'));
+    tab.style.display = 'none';
+
+    root.append(card, tab);
 
     const head = el('div', 'head');
     head.appendChild(icon(res.secret ? 'warn' : 'pin'));
     head.appendChild(el('div', 'lbl title-font' + (res.secret ? ' warn' : ''),
       res.secret ? 'Lieu secret' : 'Lieu'));
     const x = el('button', 'x');
-    x.title = 'Masquer';
+    x.title = 'Replier';
     x.appendChild(icon('close'));
-    x.addEventListener('click', onClose);
+    x.addEventListener('click', () => {
+      card.style.display = 'none';
+      tab.style.display = '';
+    });
+    tab.addEventListener('click', () => {
+      tab.style.display = 'none';
+      card.style.display = '';
+    });
     head.appendChild(x);
     card.appendChild(head);
 
@@ -315,10 +340,7 @@
       if (attempt < 3) retry = setTimeout(() => mountEvent(attempt + 1), 400);
       return;
     }
-    const card = buildCard(res, () => {
-      card.remove();
-      mounted = mounted.filter((h) => h !== card);
-    });
+    const card = buildCard(res);
     document.documentElement.appendChild(card);
     mounted.push(card);
   }
@@ -350,15 +372,6 @@
 
   observer.observe(document.body, { childList: true, subtree: true });
   mount();
-
-  // Point d'entrée pour le popup, qui reste utilisable si le script de contenu
-  // n'a pas encore été injecté dans un onglet ouvert avant l'installation.
-  SG.openQuickView = () => {
-    if (!view) {
-      view = SG.quickView.create();
-    }
-    view.show({});
-  };
 
   // Appelé par la version suivante quand l'extension est rechargée sous un
   // onglet déjà ouvert : sans cela, l'observateur de cette version-ci
