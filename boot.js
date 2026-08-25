@@ -359,4 +359,14 @@
     }
     view.show({});
   };
+
+  // Appelé par la version suivante quand l'extension est rechargée sous un
+  // onglet déjà ouvert : sans cela, l'observateur de cette version-ci
+  // continuerait de tourner et de monter des surfaces en concurrence.
+  SG.teardown = () => {
+    observer.disconnect();
+    clearTimeout(timer);
+    unmount();
+    if (window.__sg === SG) delete window.__sg;
+  };
 })();

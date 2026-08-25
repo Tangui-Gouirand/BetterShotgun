@@ -132,6 +132,13 @@ l'autre.
 Chrome n'y a donc injecté aucun script. Recharge la page. Le popup de
 l'extension fait le travail en attendant.
 
+**Une erreur dans la console après avoir rechargé l'extension** : recharge
+aussi les onglets Shotgun ouverts. Chrome y laisse les scripts de la version
+précédente, qui continuent de tourner sur une page que la nouvelle version ne
+connaît pas. Les scripts s'estampillent d'une version et démontent celle
+d'avant, mais ils ne peuvent le faire qu'une fois injectés — donc au
+rechargement de la page.
+
 **« Lecture de la page impossible »** : recharge la page d'événement, puis
 clique à nouveau sur l'icône.
 

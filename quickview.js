@@ -5,8 +5,32 @@
 // Shadow DOM accroché à <html>, hors du conteneur React. Shotgun peut donc
 // rendre et re-rendre ce qu'il veut sans effacer l'interface.
 (() => {
-  const SG = (window.__sg = window.__sg || {});
-  if (SG.quickView) return;
+  // Estampille de version. Recharger l'extension pendant qu'un onglet est
+  // ouvert laisse dans la page l'état de la version précédente : ses objets
+  // n'ont pas forcément la même forme, et un garde qui se contenterait de
+  // constater leur présence appellerait des méthodes qui n'existent plus.
+  // À version différente, on démonte tout et on repart de zéro.
+  const VERSION = '1.3.1';
+
+  let SG = window.__sg;
+  if (SG && SG.version !== VERSION) {
+    if (typeof SG.teardown === 'function') {
+      try { SG.teardown(); } catch (e) { /* une version morte n'a pas à bloquer */ }
+    }
+    SG = null;
+  }
+  if (SG && SG.quickView) return;
+
+  // Surfaces orphelines : celles d'une version dont le `teardown` a échoué ou
+  // n'existait pas. Sans ce nettoyage, un panneau plein écran resterait posé
+  // sur la page sans plus rien pour le fermer.
+  for (const stale of document.querySelectorAll('[data-sg], [data-shotgun-quick-view]')) {
+    stale.remove();
+  }
+  document.documentElement.style.overflow = '';
+
+  SG = window.__sg = {};
+  SG.version = VERSION;
 
   /* ------------------------------------------------------------- charte */
 
