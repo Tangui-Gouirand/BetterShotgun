@@ -121,6 +121,7 @@ machine et ne contient que des couples « coordonnées → adresse ».
 | `quickview.js` | Charte graphique, lecture des cartes de liste, construction de l'agenda |
 | `boot.js` | Décide quoi afficher selon le chemin, suit les changements de page, dessine la carte lieu et le bouton |
 | `popup.js` / `popup.html` | Dit si l'interface tourne dans l'onglet, et l'y met sinon. Rien d'autre |
+| `tools/make-icons.js` | Régénère `icons/` aux couleurs de la charte. `node tools/make-icons.js icons` |
 
 Chaque surface vit dans son propre Shadow DOM accroché à `<html>`, hors du
 conteneur React. Shotgun peut donc rendre et re-rendre ce qu'il veut sans
