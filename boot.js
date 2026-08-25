@@ -113,10 +113,11 @@
 
 /* Repli de la carte : fermer ne la fait pas disparaître, sinon il faudrait
    recharger la page pour la revoir. */
-.tab { position: fixed; left: 20px; bottom: 20px; z-index: 2147483645;
+.tab { position: fixed; right: 20px; bottom: 20px; z-index: 2147483645;
   width: 44px; height: 44px; border-radius: var(--r);
   background: var(--bg); border: 1px solid var(--line);
   box-shadow: 0 8px 28px rgba(0, 0, 0, .5);
+  display: grid; place-items: center; color: var(--accent); }
   display: grid; place-items: center; color: var(--accent); }
 .tab:hover { border-color: var(--accent); background: #232323; }
 .tab .icon { width: 20px; height: 20px; }
