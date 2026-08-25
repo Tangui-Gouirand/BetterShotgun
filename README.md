@@ -54,6 +54,11 @@ n'injecte qu'au chargement d'un document, et Shotgun change de page sans en
 recharger un. Hors des pages d'événement, de ville, de salle, d'artiste et de
 festival, ils n'affichent rien.
 
+## Si quelque chose cloche
+
+Ouvre la console de la page et tape `window.__sg.trace` : le journal dit ce qui
+a été monté, démonté, et sur quel chemin.
+
 ## Limites
 
 - L'adresse d'un lieu secret n'est nulle part dans la page. Aucun outil ne peut

@@ -309,11 +309,25 @@
 
   /* -------------------------------------------------------- montage */
 
+  // Journal en mémoire, sans écrire dans la console. Une surface qui apparaît
+  // puis disparaît ne laisse aucune trace autrement : `window.__sg.trace` dit
+  // qui a monté, qui a démonté, et sur quel chemin.
+  const trace = [];
+  const started = performance.now();
+
+  function note(ev, extra) {
+    trace.push(Object.assign(
+      { t: Math.round(performance.now() - started), ev, path: location.pathname },
+      extra));
+    if (trace.length > 80) trace.shift();
+  }
+
   let mounted = [];
   let view = null;
   let retry = null;
 
   function unmount() {
+    note('unmount', { surfaces: mounted.length });
     clearTimeout(retry);
     retry = null;
     for (const h of mounted) h.remove();
@@ -337,16 +351,19 @@
   function mountEvent(attempt = 0) {
     const res = SG.readEvent();
     if (!res || !res.found) {
+      note('lieu introuvable', { attempt });
       if (attempt < 3) retry = setTimeout(() => mountEvent(attempt + 1), 400);
       return;
     }
     const card = buildCard(res);
     document.documentElement.appendChild(card);
     mounted.push(card);
+    note('carte montée', { attempt, secret: res.secret });
   }
 
   function mount() {
     const kind = kindOf(location.pathname);
+    note('mount', { kind: kind || 'aucun' });
     if (kind === 'event') mountEvent();
     else if (kind === 'list') mountList();
   }
@@ -364,6 +381,7 @@
     clearTimeout(timer);
     timer = setTimeout(() => {
       if (location.pathname === lastPath) return;
+      note('navigation', { de: lastPath });
       lastPath = location.pathname;
       unmount();
       mount();
@@ -371,7 +389,11 @@
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+  note('démarrage', { readyState: document.readyState, version: SG.version });
   mount();
+
+  // Lecture du journal depuis la console : window.__sg.trace
+  SG.trace = trace;
 
   // Appelé par la version suivante quand l'extension est rechargée sous un
   // onglet déjà ouvert : sans cela, l'observateur de cette version-ci
