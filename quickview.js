@@ -10,7 +10,7 @@
   // n'ont pas forcément la même forme, et un garde qui se contenterait de
   // constater leur présence appellerait des méthodes qui n'existent plus.
   // À version différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.3.4';
+  const VERSION = '1.4.0';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -85,6 +85,8 @@ button { cursor: pointer; background: none; border: none; }
   const PATHS = {
     pin: ['M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 1 1 16 0Z', 'M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z'],
     list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
+    grid: ['M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M3 14h7v7H3z', 'M14 14h7v7h-7z'],
+    plus: ['M12 5v14', 'M5 12h14'],
     close: ['M18 6 6 18', 'm6 6 12 12'],
     search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z', 'm21 21-4.3-4.3'],
     copy: ['M9 9h10v12H9z', 'M5 15H4V3h12v1'],
@@ -240,22 +242,98 @@ button { cursor: pointer; background: none; border: none; }
   // Cette requête ne part qu'à l'ouverture de la vue, jamais au chargement de
   // la page : personne n'a demandé 2,5 Mo pour une ville qu'on ne fait que
   // traverser.
-  const CITY_RE = /^\/[^/]+\/cities\/[^/]+/;
+  const CITY_RE = /^\/[^/]+\/cities\/([^/?#]+)/;
   const FULL_PAGE = 30;
 
-  async function loadAll() {
-    const path = location.pathname;
-    if (!CITY_RE.test(path)) return parseDoc(document);
+  const locale = () => (location.pathname.split('/')[1] || 'fr');
+  const citySlug = () => {
+    const m = location.pathname.match(CITY_RE);
+    return m ? m[1] : null;
+  };
 
-    const r = await fetch(path + '?page=' + FULL_PAGE, {
-      credentials: 'same-origin',
-      headers: { Accept: 'text/html' }
-    });
+  async function fetchDoc(path) {
+    const r = await fetch(path, { credentials: 'same-origin', headers: { Accept: 'text/html' } });
     if (!r.ok) throw new Error('http ' + r.status);
-    const events = parseDoc(new DOMParser().parseFromString(await r.text(), 'text/html'));
-    // Une réponse inattendue ne doit pas donner une vue vide alors que la page
-    // affichée contient déjà des événements exploitables.
-    return events.length ? events : parseDoc(document);
+    return new DOMParser().parseFromString(await r.text(), 'text/html');
+  }
+
+  // Agenda complet d'une ville. Les cartes ne portent pas le nom de la ville :
+  // il vient du slug demandé, seule source fiable quand on en mélange
+  // plusieurs.
+  async function loadCity(slug, name) {
+    const events = parseDoc(await fetchDoc('/' + locale() + '/cities/' + slug + '?page=' + FULL_PAGE));
+    for (const ev of events) {
+      ev.citySlug = slug;
+      ev.cityName = name || slug;
+    }
+    return events;
+  }
+
+  /* --------------------------------------------------- index des villes */
+
+  // 171 villes en août 2026, avec leur nombre d'événements. Gardé une journée :
+  // l'index bouge lentement, et le picker doit s'ouvrir sans attendre.
+  const CITIES_KEY = 'citiesIndex';
+  const CITIES_TTL_MS = 24 * 60 * 60 * 1000;
+  const COUNT_RE = /^(.*?)([\d][\d\s  ]*)\s*(?:évènements?|events?|eventos?)$/i;
+
+  let citiesPromise = null;
+
+  function parseCities(doc, loc) {
+    const out = [];
+    const seen = new Set();
+    for (const a of doc.querySelectorAll('a[href^="/' + loc + '/cities/"]')) {
+      const href = a.getAttribute('href') || '';
+      const slug = href.split('/').pop().split('?')[0];
+      const text = (a.textContent || '').trim().replace(/\s+/g, ' ');
+      if (!slug || !text || seen.has(slug)) continue;
+      seen.add(slug);
+      // Le libellé colle le nom au compteur : « Paris2 493 évènements ».
+      const m = text.match(COUNT_RE);
+      out.push({
+        slug,
+        name: m ? m[1].trim() : text,
+        count: m ? Number(m[2].replace(/[\s  ]/g, '')) : null
+      });
+    }
+    return out.sort((a, b) => (b.count || 0) - (a.count || 0));
+  }
+
+  function cities() {
+    if (citiesPromise) return citiesPromise;
+    citiesPromise = (async () => {
+      try {
+        const hit = (await chrome.storage.local.get(CITIES_KEY))[CITIES_KEY];
+        if (hit && hit.at && Date.now() - hit.at < CITIES_TTL_MS && hit.value.length) return hit.value;
+      } catch (e) { /* pas de cache disponible */ }
+
+      const loc = locale();
+      const list = parseCities(await fetchDoc('/' + loc + '/cities'), loc);
+      try {
+        await chrome.storage.local.set({ [CITIES_KEY]: { at: Date.now(), value: list } });
+      } catch (e) { /* non bloquant */ }
+      return list;
+    })().catch(() => []);
+    return citiesPromise;
+  }
+
+  // Villes retenues d'une session à l'autre. Restaurées seulement si la
+  // sélection contient la ville de la page : arriver sur Lyon et voir Paris
+  // serait déroutant.
+  const PICK_KEY = 'citiesPicked';
+
+  async function restorePick(current) {
+    try {
+      const saved = (await chrome.storage.local.get(PICK_KEY))[PICK_KEY];
+      if (Array.isArray(saved) && saved.includes(current)) return saved;
+    } catch (e) { /* pas de cache disponible */ }
+    return [current];
+  }
+
+  function savePick(slugs) {
+    try {
+      chrome.storage.local.set({ [PICK_KEY]: slugs });
+    } catch (e) { /* non bloquant */ }
   }
 
   /* ------------------------------------------------------------- filtres */
@@ -266,14 +344,6 @@ button { cursor: pointer; background: none; border: none; }
     ['tomorrow', 'Demain'],
     ['weekend', 'Week-end'],
     ['week', '7 jours']
-  ];
-
-  const PRICES = [
-    [null, 'Tout prix'],
-    [0, 'Gratuit'],
-    [10, '≤ 10 €'],
-    [20, '≤ 20 €'],
-    [35, '≤ 35 €']
   ];
 
   function dayStart(d) {
@@ -345,9 +415,70 @@ header { flex: 0 0 auto; padding: 16px 24px 0; border-bottom: 1px solid var(--li
 .chip-quiet { background: none; border: 1px solid var(--line); color: var(--muted); }
 .chip-quiet:hover { background: var(--fill); color: var(--fg); }
 .sep { width: 1px; height: 20px; background: var(--line); margin: 0 6px; }
-select { height: 36px; background: var(--fill); border: none; border-radius: var(--rb);
-  padding: 0 10px; font-size: 12px; font-weight: 700; letter-spacing: .7px;
-  text-transform: uppercase; color: var(--fg); outline: none; }
+
+/* Chaque réglage porte son intitulé : sans lui, une rangée de boutons
+   n'explique pas ce qu'elle règle. */
+.grp { display: flex; align-items: center; gap: 9px; }
+.grp-lbl { font-size: 10px; font-weight: 700; letter-spacing: .9px;
+  text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+
+/* Sélecteur segmenté, à la place des listes déroulantes : la liste d'un
+   <select> est dessinée par le système, on ne peut ni la styler ni y montrer
+   l'option active sans l'ouvrir. */
+.seg { display: flex; gap: 3px; padding: 3px; background: var(--fill);
+  border-radius: var(--rb); }
+.seg button { display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 13px; border-radius: 2px;
+  font-size: 12px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase;
+  color: var(--muted); white-space: nowrap; }
+.seg button:hover { color: var(--fg); }
+.seg button.on { background: var(--accent); color: #1c1c1c; }
+.seg .icon { width: 14px; height: 14px; }
+
+.price { display: flex; align-items: center; gap: 11px; }
+.price input { width: 148px; height: 20px; accent-color: var(--accent); cursor: pointer; }
+.price .val { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+  min-width: 66px; }
+.price .val.all { color: var(--muted); font-weight: 400; }
+.price .excl { font-size: 11px; color: var(--muted); max-width: 190px; }
+
+/* Villes retenues */
+.cities { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.citychip { display: inline-flex; align-items: center; gap: 7px;
+  height: 32px; padding: 0 12px; border-radius: var(--rb);
+  background: var(--accent); color: #1c1c1c;
+  font-size: 12px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; }
+.citychip.err { background: var(--danger); color: #fff; }
+.citychip .num { font-weight: 400; opacity: .75; }
+.citychip .rm { display: grid; place-items: center; width: 16px; height: 16px;
+  border-radius: 50%; opacity: .6; }
+.citychip .rm:hover { opacity: 1; background: rgba(0, 0, 0, .18); }
+.citychip .rm .icon { width: 11px; height: 11px; stroke-width: 3; }
+.citychip.add { background: none; border: 1px dashed var(--line-strong); color: var(--muted); }
+.citychip.add:hover, .citychip.add.on { border-style: solid; border-color: var(--accent);
+  color: var(--accent); }
+.citychip .spin { width: 11px; height: 11px; border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, .25); border-top-color: #1c1c1c;
+  animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .citychip .spin { animation: none; } }
+
+/* Choix d'une ville */
+.picker { width: min(420px, 100%); background: #232323; border: 1px solid var(--line);
+  border-radius: var(--r); padding: 10px; }
+.pick-search { width: 100%; height: 36px; padding: 0 12px; margin-bottom: 8px;
+  border-radius: var(--rb); background: var(--fill); border: 1px solid transparent;
+  outline: none; font-size: 14px; }
+.pick-search:focus { border-color: var(--accent); }
+.pick-search::placeholder { color: var(--muted); }
+.pick-list { max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; }
+.pick-row { display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border-radius: var(--rb); text-align: left; }
+.pick-row:hover { background: var(--fill); }
+.pick-row.on { color: var(--accent); }
+.pick-row .nm { flex: 1; font-size: 14px; font-weight: 500; }
+.pick-row .ct { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pick-none { padding: 12px 10px; color: var(--muted); font-size: 13px; }
 
 main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 0 24px 48px; }
 .day { position: sticky; top: 0; z-index: 2; background: var(--bg); width: max-content;
@@ -365,6 +496,9 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
   text-overflow: ellipsis; }
 .ev .v { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; }
+.ev .v .city { color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .7px;
+  text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px;
+  padding: 1px 7px; margin-right: 7px; }
 .ev .g { flex: 0 0 auto; display: flex; gap: 5px; max-width: 340px; overflow: hidden; }
 .ev .g span { font-size: 10px; font-weight: 500; letter-spacing: .3px; text-transform: uppercase;
   color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px;
@@ -408,8 +542,14 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       sort: 'date',
       view: 'list',
       cursor: -1,
-      loaded: false
+      loaded: false,
+      // Multi-villes : la sélection, et l'état de chargement de chacune.
+      picked: [],
+      cityState: new Map(),
+      picker: false
     };
+
+    const onCityPage = Boolean(citySlug());
 
     const { host, root } = SG.surface('quick-view', VIEW_CSS);
     const wrap = el('div', 'sg wrap');
@@ -433,10 +573,13 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
     search.placeholder = 'Rechercher un titre, une salle, un genre…';
     searchBox.append(icon('search'), search, el('span', 'kbd', '/'));
 
+    const rowCities = el('div', 'row');
+    const pickerBox = el('div', 'picker');
+    pickerBox.style.display = 'none';
     const rowWhen = el('div', 'row');
     const rowGenres = el('div', 'row');
     const rows = el('div', 'rows');
-    rows.append(rowWhen, rowGenres);
+    rows.append(rowCities, pickerBox, rowWhen, rowGenres);
     header.append(top, searchBox, rows);
 
     function chip(label, on, onClick, quiet) {
@@ -445,10 +588,13 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       return b;
     }
 
-    function matches(ev) {
+    function matches(ev, skipPrice) {
       if (state.hideSold && ev.soldOut) return false;
 
-      if (state.maxPrice !== null) {
+      if (!skipPrice && state.maxPrice !== null) {
+        // Un événement sans prix affiché ne peut ni satisfaire ni contredire un
+        // plafond. Il sort du lot, et `paint` dit combien sont écartés pour
+        // cette raison : sans ce compte, ils disparaîtraient sans explication.
         if (ev.price === null) return false;
         if (state.maxPrice === 0 ? ev.price !== 0 : ev.price > state.maxPrice) return false;
       }
@@ -482,35 +628,192 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       return out;
     }
 
+    // Un groupe = son intitulé, puis son réglage.
+    function group(label, control) {
+      const g = el('div', 'grp');
+      g.append(el('span', 'grp-lbl', label), control);
+      return g;
+    }
+
+    // Sélecteur segmenté : toutes les options visibles, l'active en évidence.
+    function segmented(options, current, onPick) {
+      const seg = el('div', 'seg');
+      for (const o of options) {
+        const b = el('button', o.value === current ? 'on' : null);
+        if (o.icon) b.appendChild(icon(o.icon));
+        b.appendChild(el('span', null, o.label));
+        if (o.title) b.title = o.title;
+        b.addEventListener('click', () => onPick(o.value));
+        seg.appendChild(b);
+      }
+      return seg;
+    }
+
+    // Borne du curseur, tirée de l'agenda chargé. Le maximum brut collerait la
+    // quasi-totalité des soirées dans le premier quart de la course dès qu'un
+    // billet à 200 € traîne : on s'arrête au 95e centile, arrondi à 5 €.
+    function priceCap() {
+      const prices = state.all.map((e) => e.price).filter((p) => p !== null).sort((a, b) => a - b);
+      if (!prices.length) return 50;
+      const p95 = prices[Math.min(prices.length - 1, Math.floor(prices.length * 0.95))];
+      return Math.max(20, Math.ceil(p95 / 5) * 5);
+    }
+
+    function priceControl() {
+      const cap = priceCap();
+      const box = el('div', 'price');
+
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = '0';
+      input.max = String(cap);
+      input.step = '1';
+      // La position haute vaut « tout prix » : un curseur est toujours quelque
+      // part, il lui faut donc une case pour ne rien filtrer du tout.
+      input.value = String(state.maxPrice === null ? cap : state.maxPrice);
+      input.title = 'Prix maximum. À fond à droite, aucun filtre.';
+
+      const val = el('div', 'val');
+      const excl = el('div', 'excl');
+
+      function label() {
+        if (state.maxPrice === null) {
+          val.textContent = 'Tout prix';
+          val.className = 'val all';
+        } else {
+          val.textContent = state.maxPrice === 0 ? 'Gratuit' : '≤ ' + state.maxPrice + ' €';
+          val.className = 'val';
+        }
+        const hidden = state.maxPrice === null ? 0
+          : state.all.filter((e) => e.price === null && matches(e, true)).length;
+        excl.textContent = hidden ? hidden + ' sans prix affiché, écartés' : '';
+      }
+
+      input.addEventListener('input', () => {
+        const v = Number(input.value);
+        state.maxPrice = v >= cap ? null : v;
+        label();
+        repaintList();
+      });
+
+      label();
+      box.append(input, val, excl);
+      return box;
+    }
+
+    // Une ville retenue : son nom, son décompte quand elle est arrivée, et de
+    // quoi la retirer. La ville de la page n'a pas de croix.
+    function cityChip(slug, info) {
+      const st = state.cityState.get(slug);
+      const b = el('button', 'citychip' + (st === 'erreur' ? ' err' : ''));
+      b.appendChild(el('span', null, (info && info.name) || slug));
+
+      if (st === 'chargement' || st === 'attente') b.appendChild(el('span', 'spin'));
+      else if (st === 'erreur') b.appendChild(el('span', 'num', 'échec'));
+
+      if (slug !== citySlug()) {
+        const x = el('span', 'rm');
+        x.appendChild(icon('close'));
+        x.title = 'Retirer ' + ((info && info.name) || slug);
+        x.addEventListener('click', (e) => { e.stopPropagation(); pick(slug, false); });
+        b.appendChild(x);
+      }
+      return b;
+    }
+
+    function cityGroup() {
+      const box = el('div', 'cities');
+      for (const slug of state.picked) {
+        box.appendChild(cityChip(slug, state.cityIndex && state.cityIndex.get(slug)));
+      }
+      const add = el('button', 'citychip add' + (state.picker ? ' on' : ''));
+      add.appendChild(icon('plus'));
+      add.appendChild(el('span', null, 'Ville'));
+      add.addEventListener('click', () => { state.picker = !state.picker; buildToolbar(); });
+      box.appendChild(add);
+      return box;
+    }
+
+    // Liste déroulante maison : 171 villes, donc un champ de recherche et un
+    // classement par nombre d'événements plutôt qu'un ordre alphabétique où
+    // les grandes villes se perdent.
+    function buildPicker() {
+      pickerBox.replaceChildren();
+      if (!state.picker) { pickerBox.style.display = 'none'; return; }
+      pickerBox.style.display = '';
+
+      const search2 = document.createElement('input');
+      search2.type = 'search';
+      search2.placeholder = 'Chercher une ville…';
+      search2.className = 'pick-search';
+
+      const list = el('div', 'pick-list');
+
+      function fill() {
+        const q = search2.value.trim().toLowerCase();
+        list.replaceChildren();
+        const index = state.cityIndex ? [...state.cityIndex.values()] : [];
+        const hits = index
+          .filter((c) => !q || c.name.toLowerCase().includes(q))
+          .slice(0, 60);
+        if (!hits.length) {
+          list.appendChild(el('div', 'pick-none', 'Aucune ville.'));
+          return;
+        }
+        for (const c of hits) {
+          const on = state.picked.includes(c.slug);
+          const b = el('button', 'pick-row' + (on ? ' on' : ''));
+          b.appendChild(el('span', 'nm', c.name));
+          b.appendChild(el('span', 'ct', c.count === null ? '' : c.count + ' évts'));
+          b.addEventListener('click', () => { pick(c.slug, !on); buildToolbar(); });
+          list.appendChild(b);
+        }
+      }
+
+      search2.addEventListener('input', fill);
+      fill();
+      pickerBox.append(search2, list);
+      setTimeout(() => search2.focus(), 0);
+    }
+
     function buildToolbar() {
       rowWhen.replaceChildren();
-      for (const [k, label] of WHEN) {
-        rowWhen.appendChild(chip(label, state.when === k, () => { state.when = k; paint(); }));
-      }
-      rowWhen.appendChild(el('div', 'sep'));
-      for (const [v, label] of PRICES) {
-        rowWhen.appendChild(chip(label, state.maxPrice === v, () => { state.maxPrice = v; paint(); }));
-      }
-      rowWhen.appendChild(el('div', 'sep'));
-      rowWhen.appendChild(chip('Sans les complets', state.hideSold, () => {
-        state.hideSold = !state.hideSold;
-        paint();
-      }));
 
-      const sort = document.createElement('select');
-      for (const [v, label] of [['date', 'Par date'], ['price', 'Prix croissant'],
-        ['priceDesc', 'Prix décroissant']]) {
-        sort.appendChild(new Option(label, v, false, state.sort === v));
+      if (onCityPage) {
+        rowCities.style.display = '';
+        rowCities.replaceChildren();
+        rowCities.appendChild(el('span', 'grp-lbl', 'Villes'));
+        rowCities.appendChild(cityGroup());
+        buildPicker();
+      } else {
+        rowCities.style.display = 'none';
+        pickerBox.style.display = 'none';
       }
-      sort.addEventListener('change', () => { state.sort = sort.value; paint(); });
 
-      const view = document.createElement('select');
-      for (const [v, label] of [['list', 'Liste'], ['grid', 'Affiches']]) {
-        view.appendChild(new Option(label, v, false, state.view === v));
-      }
-      view.addEventListener('change', () => { state.view = view.value; paint(); });
+      rowWhen.appendChild(group('Quand', segmented(
+        WHEN.map(([value, label]) => ({ value, label })),
+        state.when,
+        (v) => { state.when = v; paint(); })));
 
-      rowWhen.append(el('div', 'spacer'), sort, view);
+      rowWhen.appendChild(group('Prix', priceControl()));
+
+      rowWhen.appendChild(group('Places', segmented(
+        [{ value: false, label: 'Toutes' }, { value: true, label: 'Encore libres' }],
+        state.hideSold,
+        (v) => { state.hideSold = v; paint(); })));
+
+      rowWhen.appendChild(el('div', 'spacer'));
+
+      rowWhen.appendChild(group('Trier', segmented([
+        { value: 'date', label: 'Date' },
+        { value: 'price', label: 'Prix ↑', title: 'Prix croissant' },
+        { value: 'priceDesc', label: 'Prix ↓', title: 'Prix décroissant' }
+      ], state.sort, (v) => { state.sort = v; paint(); })));
+
+      rowWhen.appendChild(group('Voir', segmented([
+        { value: 'list', label: 'Liste', icon: 'list' },
+        { value: 'grid', label: 'Affiches', icon: 'grid' }
+      ], state.view, (v) => { state.view = v; paint(); })));
 
       // Les genres sont ceux réellement présents dans l'agenda chargé, classés
       // par fréquence : proposer une taxonomie figée afficherait des filtres
@@ -522,6 +825,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       const top12 = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
 
       rowGenres.replaceChildren();
+      if (top12.length) rowGenres.appendChild(el('span', 'grp-lbl', 'Genres'));
       for (const [g] of top12) {
         rowGenres.appendChild(chip(g, state.genres.has(g), () => {
           if (state.genres.has(g)) state.genres.delete(g);
@@ -559,7 +863,13 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
 
       const mid = el('div', 'mid');
       mid.appendChild(el('div', 't', ev.title));
-      if (ev.venue) mid.appendChild(el('div', 'v', ev.venue));
+      const sub = el('div', 'v');
+      // Le nom de la ville n'a d'intérêt que si la liste en mélange plusieurs.
+      if (state.picked.length > 1 && ev.cityName) {
+        sub.appendChild(el('span', 'city', ev.cityName));
+      }
+      if (ev.venue) sub.appendChild(document.createTextNode(ev.venue));
+      if (sub.childNodes.length) mid.appendChild(sub);
       a.appendChild(mid);
 
       if (ev.genres.length) {
@@ -579,10 +889,25 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
 
     function paint() {
       buildToolbar();
+      repaintList();
+    }
+
+    // Le curseur de prix ne repasse pas par `paint` : reconstruire la barre
+    // sous les doigts remplacerait le curseur en cours de glissement, et le
+    // relâcherait.
+    function repaintList() {
       const list = visible();
       state.cursor = -1;
 
-      count.textContent = list.length + ' / ' + state.all.length + ' événements';
+      const pending = [...state.cityState.values()]
+        .filter((s) => s === 'attente' || s === 'chargement').length;
+      count.textContent = list.length + ' / ' + state.all.length + ' événements' +
+        (pending ? ' · ' + pending + ' ville' + (pending > 1 ? 's' : '') + ' en cours…' : '');
+
+      // Rien encore reçu et des villes en route : c'est un chargement, pas une
+      // recherche infructueuse.
+      if (!state.all.length && pending) { loading(); return; }
+
       main.replaceChildren();
 
       if (!list.length) {
@@ -667,11 +992,19 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
 
     close.addEventListener('click', () => hide());
 
+    // Le compteur n'est pas touché ici : pendant un chargement multi-villes il
+    // porte déjà « … · 2 villes en cours… », plus informatif qu'un « Chargement ».
     function loading() {
       const s = el('div', null);
       for (let i = 0; i < 8; i++) s.appendChild(el('div', 'skel'));
       main.replaceChildren(s);
-      count.textContent = 'Chargement…';
+    }
+
+    function empty() {
+      count.textContent = '';
+      const s = el('div', 'state');
+      s.appendChild(el('div', null, 'Aucun événement lisible ici.'));
+      main.replaceChildren(s);
     }
 
     function fail() {
@@ -696,19 +1029,81 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       setTimeout(() => search.focus(), 0);
 
       if (state.loaded) return;
+      state.loaded = true;
+      count.textContent = 'Chargement…';
       loading();
-      loadAll().then((events) => {
-        state.loaded = true;
-        state.all = events;
-        if (!events.length) {
-          count.textContent = '';
-          const s = el('div', 'state');
-          s.appendChild(el('div', null, 'Aucun événement lisible sur cette page.'));
-          main.replaceChildren(s);
-          return;
-        }
-        paint();
+
+      if (!onCityPage) {
+        // Page de salle, d'artiste ou de festival : tout est déjà rendu, il
+        // n'y a ni agenda complet à demander ni ville à mélanger.
+        try {
+          state.all = SG.parseDoc(document);
+          state.all.length ? paint() : empty();
+        } catch (e) { fail(); }
+        return;
+      }
+
+      restorePick(citySlug()).then((slugs) => {
+        state.picked = slugs;
+        return reload();
       }).catch(fail);
+    }
+
+    // Une ville pèse 2,5 Mo et deux secondes. Les charger toutes avant
+    // d'afficher quoi que ce soit ferait un écran figé de dix secondes sur
+    // cinq villes : on fond et on redessine au fur et à mesure, deux requêtes
+    // de front.
+    const CONCURRENCY = 2;
+
+    async function reload() {
+      const merged = new Map();
+      const queue = state.picked.slice();
+
+      state.cityState = new Map(queue.map((s) => [s, 'attente']));
+      state.all = [];
+      paint();
+
+      const index = await cities();
+      state.cityIndex = new Map(index.map((c) => [c.slug, c]));
+      const nameOf = (slug) => {
+        const hit = state.cityIndex.get(slug);
+        return hit ? hit.name : slug;
+      };
+      buildToolbar();
+
+      async function worker() {
+        while (queue.length) {
+          const slug = queue.shift();
+          state.cityState.set(slug, 'chargement');
+          buildToolbar();
+          try {
+            for (const ev of await loadCity(slug, nameOf(slug))) {
+              const kept = merged.get(ev.href);
+              // Une même soirée peut figurer dans deux zones voisines.
+              if (!kept || (!kept.venue && ev.venue)) merged.set(ev.href, ev);
+            }
+            state.cityState.set(slug, merged.size);
+          } catch (e) {
+            state.cityState.set(slug, 'erreur');
+          }
+          state.all = [...merged.values()].sort((a, b) => a.start - b.start);
+          state.all.length ? paint() : buildToolbar();
+        }
+      }
+
+      await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+      if (!state.all.length) empty();
+    }
+
+    function pick(slug, on) {
+      const next = state.picked.filter((s) => s !== slug);
+      if (on) next.push(slug);
+      // La ville de la page reste toujours dans la sélection : la retirer
+      // laisserait un agenda sans rapport avec la page qu'on regarde.
+      if (!next.includes(citySlug())) next.unshift(citySlug());
+      state.picked = next;
+      savePick(next);
+      reload().catch(fail);
     }
 
     function hide() {
