@@ -348,10 +348,27 @@
   // s'affichait puis disparaissait sur tout chargement complet de page.
   //
   // Deux protections. D'abord attendre que la page soit posée avant de monter.
+  //
+  // `requestAnimationFrame` laisse React finir son commit, mais il ne
+  // s'exécute pas dans un onglet d'arrière-plan — et un événement ouvert
+  // depuis l'agenda arrive justement dans un onglet neuf, pas toujours au
+  // premier plan. Un minuteur prend donc le relais, et un second garde-fou
+  // couvre le cas où `load` ne viendrait jamais.
   function whenSettled(fn) {
-    const go = () => requestAnimationFrame(() => requestAnimationFrame(fn));
+    let done = false;
+    const once = (why) => {
+      if (done) return;
+      done = true;
+      note('montage déclenché', { par: why });
+      fn();
+    };
+    const go = () => {
+      requestAnimationFrame(() => requestAnimationFrame(() => once('image')));
+      setTimeout(() => once('minuteur'), 1200);
+    };
     if (document.readyState === 'complete') go();
     else window.addEventListener('load', go, { once: true });
+    setTimeout(() => once('garde-fou'), 4000);
   }
 
   // Ensuite réattacher ce que la page retirerait quand même. Plafonné : si
@@ -359,6 +376,11 @@
   // lutter image par image.
   const MAX_HEALS = 5;
   let heals = 0;
+
+  // Toutes nos surfaces vivent au même endroit, et c'est ce même endroit qui
+  // est surveillé. Les accrocher à <body> tout en surveillant <html> revenait
+  // à ne rien surveiller du tout : le retrait passait inaperçu.
+  const ANCHOR = () => document.documentElement;
 
   const healer = new MutationObserver((records) => {
     for (const r of records) {
@@ -373,7 +395,7 @@
         // À l'image suivante : ce rappel s'exécute pendant la phase de
         // rendu de React, et réinsérer dans un nœud qu'il est en train de
         // réconcilier le ferait retirer aussitôt.
-        requestAnimationFrame(() => document.documentElement.appendChild(n));
+        requestAnimationFrame(() => ANCHOR().appendChild(n));
       }
     }
   });
@@ -384,7 +406,7 @@
       launcher.style.display = 'none';
       view.show({ onHide: () => { launcher.style.display = ''; } });
     });
-    document.body.appendChild(launcher);
+    ANCHOR().appendChild(launcher);
     mounted.push(launcher);
   }
 
@@ -399,7 +421,7 @@
       return;
     }
     const card = buildCard(res);
-    document.body.appendChild(card);
+    ANCHOR().appendChild(card);
     mounted.push(card);
     note('carte montée', { attempt, secret: res.secret });
   }
@@ -436,7 +458,10 @@
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+  // Les deux nœuds sont surveillés : React réconcilie <html> comme <body>, et
+  // une surface peut se faire retirer de l'un ou de l'autre.
   healer.observe(document.documentElement, { childList: true });
+  healer.observe(document.body, { childList: true });
   note('démarrage', { readyState: document.readyState, version: SG.version });
   whenSettled(mount);
 

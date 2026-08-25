@@ -10,7 +10,7 @@
   // n'ont pas forcément la même forme, et un garde qui se contenterait de
   // constater leur présence appellerait des méthodes qui n'existent plus.
   // À version différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.4.2';
+  const VERSION = '1.4.3';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -1054,7 +1054,9 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       onHide = (opts && opts.onHide) || null;
       savedOverflow = document.documentElement.style.overflow;
       document.documentElement.style.overflow = 'hidden';
-      if (!host.isConnected) document.body.appendChild(host);
+      // Même point d'accrochage que les autres surfaces, pour que tout se
+      // retire et se surveille au même endroit.
+      if (!host.isConnected) document.documentElement.appendChild(host);
       host.style.display = '';
       document.addEventListener('keydown', onKey, true);
       setTimeout(() => search.focus(), 0);
