@@ -98,7 +98,7 @@
   /* ------------------------------------------------- carte « lieu » */
 
   const CARD_CSS = `
-.card { position: fixed; left: 20px; bottom: 20px; z-index: 2147483645;
+.card { position: fixed; right: 20px; bottom: 20px; z-index: 2147483645;
   width: min(380px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow-y: auto;
   background: var(--bg); border: 1px solid var(--line); border-radius: var(--r);
   box-shadow: 0 10px 40px rgba(0, 0, 0, .55); padding: 16px; }
