@@ -28,8 +28,23 @@ function activate(tabId) {
 async function run() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  if (!tab || !tab.id || !/^https:\/\/shotgun\.live\//.test(tab.url || '')) {
-    msg.textContent = 'Ouvre une page shotgun.live.';
+if (!tab || !tab.id || !/^https:\/\/shotgun\.live\//.test(tab.url || '')) {
+    msg.textContent = 'Ouvre la page ';
+    
+    const link = document.createElement('a');
+    link.href = '#';
+    link.textContent = 'shotgun.live';
+    link.style.color = '#ff765f';
+    link.style.textDecoration = 'none';
+    link.style.fontWeight = 'bold';
+  
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: 'https://shotgun.live/' });
+    });
+    
+    msg.appendChild(link);
+    msg.appendChild(document.createTextNode('.'));
     return;
   }
 
