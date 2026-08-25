@@ -1,6 +1,10 @@
-// Script injecté à la demande par le popup (chrome.scripting.executeScript).
-// La valeur de la dernière expression est renvoyée au popup, d'où l'IIFE.
+// Lecture du lieu d'une page d'événement, à partir des données structurées
+// que le serveur envoie déjà à chaque visiteur. Bibliothèque : aucun effet de
+// bord au chargement.
 (() => {
+  const SG = (window.__sg = window.__sg || {});
+  if (SG.readEvent) return;
+
   // Accepte les nombres comme les chaînes ("48.8566"), les deux se rencontrent en JSON-LD.
   function toCoord(v) {
     if (typeof v === 'number') return Number.isFinite(v) ? v : null;
@@ -58,15 +62,20 @@
     return null;
   }
 
-  function fromJsonLd() {
-    const scripts = document.querySelectorAll('script[type="application/ld+json"]');
-    for (const s of scripts) {
-      let data;
+  function eachJsonLd() {
+    const out = [];
+    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
       try {
-        data = JSON.parse(s.textContent);
+        out.push(JSON.parse(s.textContent));
       } catch (e) {
-        continue; // un bloc invalide ne doit pas empêcher de lire les suivants
+        // un bloc invalide ne doit pas empêcher de lire les suivants
       }
+    }
+    return out;
+  }
+
+  function fromJsonLd() {
+    for (const data of eachJsonLd()) {
       const hit = findGeo(data);
       if (hit) return hit;
     }
@@ -79,8 +88,7 @@
   // portent tous une `streetAddress` complète, et les 9 événements affichés
   // « Lieu secret à <Ville> » n'en ont aucune — leur `location.name` vaut le nom
   // de la ville et leurs coordonnées sont un point générique, identique d'un
-  // événement à l'autre dans une même ville (Berlin et Londres apparaissaient
-  // chacun deux fois avec exactement les mêmes coordonnées).
+  // événement à l'autre dans une même ville.
   //
   // L'absence de `streetAddress` est donc le signal fiable ; le nom de lieu égal
   // à la ville le confirme.
@@ -139,10 +147,8 @@
   }
 
   function eventDescription() {
-    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
-      let d;
-      try { d = JSON.parse(s.textContent); } catch (e) { continue; }
-      const hit = findDescription(d);
+    for (const data of eachJsonLd()) {
+      const hit = findDescription(data);
       if (hit) return hit;
     }
     return null;
@@ -218,20 +224,22 @@
     };
   }
 
-  try {
-    const geo = fromJsonLd();
-    if (!geo) return { found: false };
-    const secret = isSecret(geo);
-    return {
-      found: true,
-      title: eventTitle(),
-      secret,
-      cityCentroid: isKnownCentroid(geo.lat, geo.lon),
-      // Le canal de révélation n'a d'intérêt que sur un lieu non divulgué.
-      guidance: secret ? extractGuidance(eventDescription()) : null,
-      ...geo
-    };
-  } catch (e) {
-    return { found: false, error: String((e && e.message) || e).slice(0, 200) };
-  }
+  SG.readEvent = function readEvent() {
+    try {
+      const geo = fromJsonLd();
+      if (!geo) return { found: false };
+      const secret = isSecret(geo);
+      return {
+        found: true,
+        title: eventTitle(),
+        secret,
+        cityCentroid: isKnownCentroid(geo.lat, geo.lon),
+        // Le canal de révélation n'a d'intérêt que sur un lieu non divulgué.
+        guidance: secret ? extractGuidance(eventDescription()) : null,
+        ...geo
+      };
+    } catch (e) {
+      return { found: false, error: String((e && e.message) || e).slice(0, 200) };
+    }
+  };
 })();

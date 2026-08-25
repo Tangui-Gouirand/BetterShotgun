@@ -1,12 +1,15 @@
 # Shotgun
 
-Extension Chrome pour [shotgun.live](https://shotgun.live).
+Extension Chrome pour [shotgun.live](https://shotgun.live). Tout se passe dans
+la page : il n'y a rien à cliquer dans la barre d'outils.
 
-Sur une page d'événement, elle affiche le lieu : nom de la salle, adresse, code
-postal, coordonnées GPS, lien Google Maps.
+Sur une page d'événement, une carte apparaît en bas à gauche avec les
+coordonnées GPS, un lien Maps et, pour un lieu non divulgué, par quel canal
+l'organisateur enverra l'adresse.
 
-Sur une page de ville, de salle ou d'artiste, elle ouvre une **vue rapide** :
-tout l'agenda chargé d'un coup, en liste dense et filtrable.
+Sur une page de ville, de salle ou d'artiste, un bouton **Agenda complet**
+apparaît en bas à droite : tout l'agenda chargé d'un coup, en liste dense et
+filtrable.
 
 Elle lit les données que le serveur envoie déjà à chaque visiteur. Elle ne
 contourne aucune protection et n'accède à rien qui soit réservé aux acheteurs
@@ -22,10 +25,10 @@ Les autres pistes explorées : [ROADMAP.md](ROADMAP.md).
 4. Clique sur **Charger l'extension non empaquetée**, puis sélectionne le
    dossier.
 
-## Utilisation · vue rapide
+## Utilisation · agenda complet
 
 Ouvre une page de ville (`.../cities/aix-marseille`), de salle, d'artiste ou de
-festival. Clique sur l'icône, puis sur **Ouvrir la vue rapide**.
+festival. Le bouton **Agenda complet** attend en bas à droite.
 
 Par défaut, une page ville te montre douze événements sur deux jours, en
 affiches pleine largeur, et ne charge pas la suite quand tu fais défiler. La vue
@@ -48,20 +51,22 @@ Baby Club, la carte annonce 5,99 € alors que le palier suivant est à 9,99 €
 
 ## Utilisation · lieu d'un événement
 
-Ouvre une page d'événement (`https://shotgun.live/<langue>/events/<slug>`) puis
-clique sur l'icône de l'extension.
+Ouvre une page d'événement (`https://shotgun.live/<langue>/events/<slug>`). La
+carte apparaît seule, en bas à gauche. La croix la referme.
 
-**Lieu public.** Nom de la salle, adresse complète, code postal, coordonnées
-avec bouton de copie, lien Google Maps. L'extension interroge OpenStreetMap pour
-une adresse de contrôle, qui confirme le point.
+**Lieu public.** Shotgun affiche déjà la salle et l'adresse : la carte ne les
+répète pas. Elle ajoute ce qui manque, les coordonnées avec bouton de copie et
+le lien Maps. **Vérifier (OSM)** demande à OpenStreetMap l'adresse de ce point
+précis, pour confirmer.
 
-**Lieu secret.** Un avertissement, la ville annoncée, les coordonnées publiées
-et le lien Maps. En dessous, l'extension indique par quel canal l'organisateur
-communiquera l'adresse (Telegram, Instagram) et remonte les indices de
-localisation trouvés dans la description, du type « Nearest tram stop:
-Landsberger Allee/Rhinstraße ».
+**Lieu secret.** La ville, le code postal quand il existe, les coordonnées
+publiées et le lien Maps. En dessous, la carte indique par quel canal
+l'organisateur enverra l'adresse (Telegram, Instagram, ou une phrase de la
+description du type « Adresse envoyée par mail le jour J ») et remonte les
+indices de localisation, du type « Nearest tram stop: Landsberger
+Allee/Rhinstraße ».
 
-**Aucune donnée.** Un message explicite quand la page ne contient aucune
+**Aucune donnée.** Rien ne s'affiche quand la page ne contient aucune
 information géographique.
 
 ## Les soirées « Lieu secret »
@@ -87,31 +92,45 @@ dans la description pour t'éviter de la relire en entier.
 
 | Permission | Usage |
 |---|---|
-| `activeTab` + `scripting` | Lire la page ouverte, au clic uniquement |
+| `https://shotgun.live/*` | Exécuter les scripts sur les pages Shotgun, et charger l'agenda complet d'une ville |
 | `storage` | Mémoriser les adresses déjà consultées (30 jours) |
-| `https://shotgun.live/*` | Accéder à la page d'événement et charger l'agenda complet d'une ville |
-| `https://nominatim.openstreetmap.org/*` | Convertir des coordonnées en adresse |
+| `https://nominatim.openstreetmap.org/*` | Convertir des coordonnées en adresse, à ta demande |
+| `activeTab` + `scripting` | Le popup de secours, quand un onglet était ouvert avant l'installation |
 
-L'extension ne s'active qu'au clic sur son icône. La vue rapide ne demande
-aucune permission supplémentaire : sa seule requête part vers shotgun.live, sur
-la page de ville que tu as déjà ouverte. Rien d'autre ne sort de ta machine, à
-part les coordonnées envoyées à OpenStreetMap pour les lieux publics. Le cache
-reste chez toi et ne contient que des couples « coordonnées → adresse ».
+Les scripts tournent sur **toutes** les pages de shotgun.live. C'est le prix de
+l'injection directe : Chrome n'injecte un script qu'au chargement d'un
+document, et Shotgun change de page sans en recharger un seul. Un `matches`
+limité aux pages de ville laisserait l'extension muette dès que tu navigues
+depuis l'accueil.
+
+Ce qu'ils font sur les autres pages : rien. L'affichage est décidé à partir du
+chemin, et hors des pages d'événement, de ville, de salle, d'artiste et de
+festival, aucune surface n'est créée.
+
+Aucune requête ne part au chargement. L'agenda complet est demandé à Shotgun
+quand tu ouvres la vue, pas avant. Le seul appel à un tiers est **Vérifier
+(OSM)**, sur ton clic, et jamais pour un lieu secret. Le cache reste sur ta
+machine et ne contient que des couples « coordonnées → adresse ».
 
 ## Structure
 
 | Fichier | Rôle |
 |---|---|
-| `content.js` | Lit le JSON-LD d'une page d'événement, en extrait le lieu, détecte les lieux non divulgués |
-| `browse.js` | Charge l'agenda et construit la vue rapide dans un Shadow DOM |
-| `popup.js` | Aiguille selon la page ouverte, affiche le lieu ou lance la vue rapide |
-| `popup.html` | Styles et icônes du popup |
+| `event.js` | Lit le JSON-LD d'une page d'événement, en extrait le lieu, détecte les lieux non divulgués |
+| `quickview.js` | Charte graphique, lecture des cartes de liste, construction de l'agenda |
+| `boot.js` | Décide quoi afficher selon le chemin, suit les changements de page, dessine la carte lieu et le bouton |
+| `popup.js` / `popup.html` | Le popup de secours |
 
-`content.js` et `browse.js` ne sont jamais déclarés dans le manifeste :
-`popup.js` les injecte au clic, ce qui évite le cas où l'onglet était déjà
-ouvert au moment de l'installation.
+Chaque surface vit dans son propre Shadow DOM accroché à `<html>`, hors du
+conteneur React. Shotgun peut donc rendre et re-rendre ce qu'il veut sans
+effacer l'interface, et sans qu'aucun style ne fuie dans un sens ou dans
+l'autre.
 
 ## En cas de problème
+
+**Rien n'apparaît dans la page** : l'onglet était ouvert avant l'installation,
+Chrome n'y a donc injecté aucun script. Recharge la page. Le popup de
+l'extension fait le travail en attendant.
 
 **« Lecture de la page impossible »** : recharge la page d'événement, puis
 clique à nouveau sur l'icône.

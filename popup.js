@@ -228,14 +228,18 @@ const GEOCODE_ERRORS = {
 
 /* --------------------------------------------------------------- lecture  */
 
-// Le content script est injecté à la demande plutôt que déclaré dans le
-// manifeste : cela évite le cas très courant où l'onglet était déjà ouvert
-// au moment de l'installation ou du rechargement de l'extension, et où aucun
-// script n'écoute donc dans la page.
+// Les scripts sont déclarés dans le manifeste, donc déjà présents sur toute
+// page Shotgun. Ils restent injectés ici pour le seul cas qu'un `matches` ne
+// couvre pas : un onglet ouvert avant l'installation de l'extension. Les
+// bibliothèques se protègent d'une double définition, l'injection est donc
+// sans effet quand elles sont déjà là.
+const LIB = ['quickview.js', 'event.js'];
+
 async function readPage(tabId) {
+  await chrome.scripting.executeScript({ target: { tabId }, files: LIB });
   const frames = await chrome.scripting.executeScript({
     target: { tabId },
-    files: ['content.js']
+    func: () => window.__sg.readEvent()
   });
   const first = Array.isArray(frames) ? frames[0] : null;
   return (first && first.result) || null;
@@ -342,24 +346,28 @@ async function renderPublic(res) {
 
 /* --------------------------------------------------- vue rapide (listes) */
 
-// Sur une page de ville, Shotgun ne charge que les deux jours suivants et
-// impose de faire défiler des affiches pleine largeur. La vue rapide charge
-// l'agenda entier en une requête et le rend filtrable au clavier.
+// Le bouton « Agenda complet » vit maintenant dans la page. Ce panneau ne sert
+// que quand il n'y est pas : onglet ouvert avant l'installation, ou script de
+// contenu rechargé.
 function renderLauncher(tabId) {
   clear();
 
   addPill('Page de liste', 'is-public');
-  addTitle('Vue rapide');
+  addTitle('Agenda complet');
 
   addCallout('info',
-    'Charge tout l’agenda de cette page en une fois et l’affiche en liste ' +
-    'dense : recherche instantanée, filtres par date, prix et genre, tri par ' +
-    'prix, navigation au clavier.');
+    'Le bouton se trouve en bas à droite de la page. S’il n’y est pas, ' +
+    'l’onglet était ouvert avant l’installation : ce bouton-ci fait la même ' +
+    'chose.');
 
-  const btn = addActionButton('Ouvrir la vue rapide', 'i-grid', 'primary', async () => {
+  const btn = addActionButton('Ouvrir l’agenda complet', 'i-grid', 'primary', async () => {
     btn.disabled = true;
     try {
-      await chrome.scripting.executeScript({ target: { tabId }, files: ['browse.js'] });
+      await chrome.scripting.executeScript({ target: { tabId }, files: [...LIB, 'boot.js'] });
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => window.__sg.openQuickView()
+      });
       window.close();
     } catch (e) {
       btn.disabled = false;
@@ -368,7 +376,7 @@ function renderLauncher(tabId) {
   });
 
   addSectionTitle('Raccourcis', 'i-compass');
-  addQuotes('Dans la vue rapide', [
+  addQuotes('Dans l’agenda', [
     '/ — rechercher',
     '↑ ↓ (ou j / k) — parcourir, Entrée — ouvrir',
     'Échap — fermer'

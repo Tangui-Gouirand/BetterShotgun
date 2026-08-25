@@ -1,13 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Shotgun - Révélateur de lieu",
-  "version": "1.2.0",
-  "description": "Affiche l'adresse publiée d'un événement Shotgun, signale les lieux non divulgués, et ajoute une vue rapide filtrable de l'agenda d'une ville.",
+  "version": "1.3.0",
+  "description": "Affiche le lieu d'un événement Shotgun directement dans la page, signale les lieux non divulgués, et ouvre l'agenda complet d'une ville en liste filtrable.",
   "minimum_chrome_version": "102",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://shotgun.live/*",
     "https://nominatim.openstreetmap.org/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://shotgun.live/*"],
+      "js": ["quickview.js", "event.js", "boot.js"],
+      "run_at": "document_idle"
+    }
   ],
   "icons": {
     "16": "icons/icon16.png",

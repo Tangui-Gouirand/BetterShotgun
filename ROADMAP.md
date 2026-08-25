@@ -125,21 +125,28 @@ même coût que l'axe 5. Une carte est utile surtout sur un filtre resserré
 
 ---
 
-## Change l'architecture · décision à prendre
+## Change l'architecture
 
-Ces axes sont hors de ce qui a été livré parce qu'ils reviennent sur une
-promesse du README : *« L'extension ne s'active qu'au clic sur son icône. »*
+L'axe 7 est passé de ce groupe au précédent. Restent ceux qui feraient tourner
+l'extension quand tu n'es pas sur le site.
 
-### 7. Bouton flottant permanent sur les pages de liste
+### 7. Injection directe — livré
 
-Un `content_scripts` déclaré avec `matches: https://shotgun.live/*` afficherait
-la vue rapide sans passer par le popup — un clic de moins.
+Décision prise : le popup n'est plus le passage obligé. Un `content_scripts`
+déclaré sur `https://shotgun.live/*` pose le bouton **Agenda complet** sur les
+pages de liste et la carte **Lieu** sur les pages d'événement, sans clic dans
+la barre d'outils.
 
-- **Coût** : l'extension s'exécuterait sur **chaque** page Shotgun visitée,
-  qu'on s'en serve ou non. La ligne du README saute et la section « vie
-  privée » est à réécrire.
-- **Compromis possible** : restreindre `matches` aux seules pages de liste
-  (`/*/cities/*`, `/*/venues/*`, `/*/artists/*`).
+Le `matches` couvre tout le site, et pas seulement les pages concernées :
+Chrome n'injecte un script qu'au chargement d'un document, or Shotgun change de
+route sans en recharger un. Un `matches` restreint laisserait l'extension muette
+dès qu'on arrive sur une ville depuis l'accueil. L'aiguillage se fait donc dans
+le script, à partir du chemin, et un `MutationObserver` sur `document.body`
+détecte les changements de route — un script de contenu vit dans un monde isolé
+et ne voit pas le `history.pushState` de la page.
+
+Contrepartie assumée et documentée : les scripts s'exécutent sur toutes les
+pages du site. En échange, aucune requête ne part au chargement.
 
 ### 8. Veille : remise en vente, baisse de prix, nouvel événement suivi
 
