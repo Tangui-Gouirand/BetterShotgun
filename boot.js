@@ -24,6 +24,12 @@
 
   /* ------------------------------------------- carte de la page */
 
+  // Point de rupture de Tailwind : au-dessus, la bannière est une rangée et le
+  // reste s'étale. En dessous tout s'empile, et la moitié de nos réglages n'a
+  // plus de sens — voire nuit.
+  const MQ = window.matchMedia('(min-width: 768px)');
+  const wide = () => MQ.matches;
+
   const GHOST_RE = /\u{1F47B}/u;
   const ZOOM_MIN = 9;
   const ZOOM_MAX = 18;
@@ -141,7 +147,7 @@
     const banner = col && col.parentElement;
     if (!col || !banner) return;
 
-    restyle(h1, { fontSize: '22px', lineHeight: '1.15' }, undos);
+    restyle(h1, { fontSize: wide() ? '22px' : '19px', lineHeight: '1.15' }, undos);
 
     // Chaque fait — date, salle, adresse — occupe une ligne à `py-4`.
     const infos = [...col.children]
@@ -158,6 +164,11 @@
 
     // Sur la largeur, pas sur la hauteur : l'affiche est en `object-cover`,
     // et la borner en hauteur la rognerait au lieu de la réduire.
+    // En dessous du point de rupture la bannière est une colonne : borner
+    // l'affiche et écarter les blocs n'aurait aucun sens, ou les éloignerait
+    // verticalement.
+    if (!wide()) return;
+
     const affiche = [...banner.children]
       .find((c) => c !== col && c.getBoundingClientRect().height > 200);
     if (!affiche) return;
@@ -167,6 +178,23 @@
     // rétrécir l'affiche laissait le vide à gauche et poussait le texte vers
     // le centre. `space-between` le ramène contre le bord.
     restyle(banner, { justifyContent: 'space-between' }, undos);
+  }
+
+  /* --------------------------------------------------------- line up */
+
+  // Des vignettes de 135 px pour des visages : 97 suffisent, et la rangée en
+  // accueille sept au lieu de cinq.
+  function compactLineup(undos) {
+    const head = [...document.querySelectorAll('div, h2, h3')].find((n) =>
+      !n.children.length && /^line ?up$/i.test((n.textContent || '').trim()));
+    const grille = head && head.parentElement && head.parentElement.children[1];
+    if (!grille || getComputedStyle(grille).display !== 'grid') return;
+
+    restyle(head, { fontSize: '18px', marginBottom: '8px' }, undos);
+    restyle(grille, {
+      gridTemplateColumns: 'repeat(auto-fill, minmax(' + (wide() ? 84 : 72) + 'px, 1fr))',
+      gap: '10px'
+    }, undos);
   }
 
   /* --------------------------------------------------- organisateurs */
@@ -197,6 +225,7 @@
       ['carte', () => enhanceMap(res, undos)],
       ['bannière', () => compactBanner(undos)],
       ['organisateurs', () => inlineOrganisers(undos)],
+      ['line up', () => compactLineup(undos)],
       ['billets', () => {
         const u = compactTickets();
         if (u) undos.push(u);
@@ -504,12 +533,18 @@
   const SENTINEL = 'data-sg-on';
   const REAPPLY_MAX = 4;
 
+  let eventUndo = null;
+
   function applyEvent(res) {
-    const undo = enhanceEvent(res);
-    if (!undo) return;
-    restores.push(undo);
+    // Toujours défaire d'abord : une seconde passe par-dessus la première
+    // sauvegarderait des styles déjà modifiés comme état d'origine.
+    if (eventUndo) {
+      try { eventUndo(); } catch (e) { /* déjà défait */ }
+      eventUndo = null;
+    }
+    eventUndo = enhanceEvent(res);
     const h1 = document.querySelector('h1');
-    if (h1) h1.setAttribute(SENTINEL, '1');
+    if (h1 && eventUndo) h1.setAttribute(SENTINEL, '1');
   }
 
   // Shotgun peut re-rendre toute la page — son hydratation échoue sur certaines
@@ -528,7 +563,18 @@
       }, CALME_MS);
     });
     obs.observe(document.body, { childList: true, subtree: true });
-    restores.push(() => { obs.disconnect(); clearTimeout(timer); });
+
+    // Nos styles sont en ligne : aucune règle média ne les suit. Au
+    // franchissement du point de rupture, on refait la passe.
+    const surRupture = () => { note('changement de largeur'); applyEvent(res); };
+    MQ.addEventListener('change', surRupture);
+
+    restores.push(() => {
+      obs.disconnect();
+      clearTimeout(timer);
+      MQ.removeEventListener('change', surRupture);
+      if (eventUndo) { eventUndo(); eventUndo = null; }
+    });
   }
 
   function mount() {
