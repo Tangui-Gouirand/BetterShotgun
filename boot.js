@@ -160,7 +160,30 @@
     // et la borner en hauteur la rognerait au lieu de la réduire.
     const affiche = [...banner.children]
       .find((c) => c !== col && c.getBoundingClientRect().height > 200);
-    if (affiche) restyle(affiche, { maxWidth: '440px' }, undos);
+    if (!affiche) return;
+    restyle(affiche, { maxWidth: '440px' }, undos);
+
+    // La rangée est en `row-reverse` et empile au début, donc à droite :
+    // rétrécir l'affiche laissait le vide à gauche et poussait le texte vers
+    // le centre. `space-between` le ramène contre le bord.
+    restyle(banner, { justifyContent: 'space-between' }, undos);
+  }
+
+  /* --------------------------------------------------- organisateurs */
+
+  // Les organisateurs s'empilent dans une colonne de 320 px et coûtent 204 px
+  // de hauteur pour deux lignes. Mis côte à côte, ils tiennent en 122.
+  function inlineOrganisers(undos) {
+    const bloc = [...document.querySelectorAll('div')]
+      .find((d) => /\bmd:w-80\b/.test(d.getAttribute('class') || ''));
+    if (!bloc || bloc.children.length < 2) return;
+
+    restyle(bloc, {
+      display: 'flex', flexWrap: 'wrap', alignItems: 'center',
+      columnGap: '24px', rowGap: '8px', width: 'auto', maxWidth: 'none'
+    }, undos);
+    // L'intitulé garde sa ligne, les organisateurs se partagent la suivante.
+    restyle(bloc.children[0], { flexBasis: '100%', marginBottom: '2px', fontSize: '18px' }, undos);
   }
 
   /* --------------------------------------- enrichissement de la page */
@@ -173,6 +196,7 @@
     const etapes = [
       ['carte', () => enhanceMap(res, undos)],
       ['bannière', () => compactBanner(undos)],
+      ['organisateurs', () => inlineOrganisers(undos)],
       ['billets', () => {
         const u = compactTickets();
         if (u) undos.push(u);
