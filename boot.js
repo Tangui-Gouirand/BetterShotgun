@@ -251,6 +251,13 @@
   // React (App Router) hydrate `document` et retire les enfants de <html>
   // qu'il ne connaît pas : on attend que la page soit posée pour monter.
   // rAF ne s'exécute pas dans un onglet d'arrière-plan, d'où les minuteurs.
+  // `load` ne dit pas que l'hydratation est finie : React 18 hydrate en
+  // concurrence, et toucher au DOM pendant qu'elle tourne la fait échouer —
+  // elle jette alors le HTML du serveur et re-rend tout, emportant nos styles.
+  // On attend donc que le DOM cesse de bouger, pas que la page soit chargée.
+  const CALME_MS = 700;
+  const GARDE_FOU_MS = 8000;
+
   function whenSettled(fn) {
     let done = false;
     const once = (why) => {
@@ -259,13 +266,15 @@
       note('montage déclenché', { par: why });
       fn();
     };
-    const go = () => {
-      requestAnimationFrame(() => requestAnimationFrame(() => once('image')));
-      setTimeout(() => once('minuteur'), 1200);
-    };
-    if (document.readyState === 'complete') go();
-    else window.addEventListener('load', go, { once: true });
-    setTimeout(() => once('garde-fou'), 4000);
+
+    let timer = null;
+    const obs = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { obs.disconnect(); once('DOM stabilisé'); }, CALME_MS);
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+    timer = setTimeout(() => { obs.disconnect(); once('DOM déjà calme'); }, CALME_MS);
+    setTimeout(() => { obs.disconnect(); once('garde-fou'); }, GARDE_FOU_MS);
   }
 
   // Réattache ce qui serait retiré malgré tout, plafonné pour ne pas boucler.
@@ -462,9 +471,40 @@
       if (attempt < 3) retry = setTimeout(() => mountEvent(attempt + 1), 400);
       return;
     }
-    const undo = enhanceEvent(res);
-    if (undo) restores.push(undo);
+    applyEvent(res);
+    watchEvent(res);
     note('page enrichie', { attempt, secret: res.secret });
+  }
+
+  // Marqueur de présence : si la page re-rend, il disparaît avec le nœud.
+  const SENTINEL = 'data-sg-on';
+  const REAPPLY_MAX = 4;
+
+  function applyEvent(res) {
+    const undo = enhanceEvent(res);
+    if (!undo) return;
+    restores.push(undo);
+    const h1 = document.querySelector('h1');
+    if (h1) h1.setAttribute(SENTINEL, '1');
+  }
+
+  // Shotgun peut re-rendre toute la page — son hydratation échoue sur certaines
+  // fiches. Nos styles partent avec les nœuds recréés : on les repose.
+  function watchEvent(res) {
+    let left = REAPPLY_MAX;
+    let timer = null;
+    const obs = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const h1 = document.querySelector('h1');
+        if (!h1 || h1.hasAttribute(SENTINEL)) return;
+        if (left-- <= 0) { obs.disconnect(); note('ré-application abandonnée'); return; }
+        note('page re-rendue, on repose');
+        applyEvent(res);
+      }, CALME_MS);
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+    restores.push(() => { obs.disconnect(); clearTimeout(timer); });
   }
 
   function mount() {
