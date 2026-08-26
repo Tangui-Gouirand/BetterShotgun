@@ -39,14 +39,13 @@ encore ouvert.
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="https://github.com/user-attachments/assets/d98a05ea-e78e-44d4-8ca8-c97273168698" alt="Démo Avant" width="100%">
+      <img src="https://github.com/user-attachments/assets/736b680b-9093-49a6-b4cf-f7b1f3269582" alt="Démo Avant" width="100%">
     </td>
     <td align="center" width="50%">
-      <img src="https://github.com/user-attachments/assets/cff97aa4-7f15-46af-b4df-d6a7181948fb" alt="Démo Après" width="100%">
+      <img src="https://github.com/user-attachments/assets/74d02d26-80f3-422f-a18d-1f562b296e98" alt="Démo Après" width="100%">
     </td>
   </tr>
 </table>
-
 
 
 ## Installation
