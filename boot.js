@@ -273,7 +273,8 @@
 /* Repli : barre de recherche introuvable, ou insertion refusée. */
 .launch.coin { position: fixed; right: 20px; bottom: 20px; z-index: 2147483645;
   box-shadow: 0 6px 22px rgba(0, 0, 0, .45); }
-@media (max-width: 900px) { .launch .lbl { display: none; } .launch { padding: 0 12px; } }
+/* Pas de règle média sur le libellé : c'est la mesure de la place réelle qui
+   décide, et en repli flottant il tient à toutes les largeurs. */
 `;
 
   const RECHERCHE_RE = /recherch|search|buscar|pesquis/i;
@@ -323,7 +324,9 @@
     // Inséré dans le flux, il ne peut rien recouvrir : la mise en page lui fait
     // sa place. En repli, il redevient flottant.
     function ranger() {
-      const cible = ancreRecherche();
+      // Sous le point de rupture, l'en-tête est trop serré pour accueillir le
+      // libellé : le repli flottant le porte en entier.
+      const cible = wide() ? ancreRecherche() : null;
       if (!cible) {
         b.classList.remove('range');
         b.classList.add('coin');
@@ -353,7 +356,13 @@
       requestAnimationFrame(() => { queued = false; if (host.isConnected) ajusterLibelle(); });
     };
     window.addEventListener('resize', surLargeur);
-    host.__detachLargeur = () => window.removeEventListener('resize', surLargeur);
+    // Franchir le point de rupture change de mode, pas seulement de libellé.
+    const surRupture = () => ranger();
+    MQ.addEventListener('change', surRupture);
+    host.__detachLargeur = () => {
+      window.removeEventListener('resize', surLargeur);
+      MQ.removeEventListener('change', surRupture);
+    };
 
     host.__ranger = ranger;
     return host;
