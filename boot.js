@@ -260,13 +260,16 @@
 .launch { height: 40px; padding: 0 14px; font-size: 12px; white-space: nowrap; }
 /* Rangé dans la mise en page du site : sobriété de « Explorer », accent sur
    la seule icône, et c'est le flux qui réserve la place. */
-.launch.range { width: 40px; padding: 0; background: none; color: var(--fg);
-  box-shadow: none; }
+/* Resserré : le libellé coûte 160 px à la taille courante, et l'en-tête n'a
+   pas cette place. À 11 px et sans interlettrage, il en coûte 135. */
+.launch.range { height: 36px; padding: 0 10px; gap: 6px; font-size: 11px;
+  letter-spacing: .3px; background: none; color: var(--fg); box-shadow: none; }
 .launch.range:hover { background: var(--fill); }
-.launch.range .icon { width: 18px; height: 18px; color: var(--accent); }
-/* Le libellé coûte 162 px que l'en-tête n'a pas : avec lui, « Je suis
-   organisateur » passe sur deux lignes. */
-.launch.range .lbl { display: none; }
+.launch.range .icon { width: 16px; height: 16px; color: var(--accent); }
+/* En-tête déjà plein : le libellé y ferait passer le bloc voisin sur deux
+   lignes. L'icône seule tient partout. */
+.launch.court { width: 36px; padding: 0; }
+.launch.court .lbl { display: none; }
 /* Repli : barre de recherche introuvable, ou insertion refusée. */
 .launch.coin { position: fixed; right: 20px; bottom: 20px; z-index: 2147483645;
   box-shadow: 0 6px 22px rgba(0, 0, 0, .45); }
@@ -304,6 +307,19 @@
     b.addEventListener('click', onOpen);
     root.appendChild(b);
 
+    // Le libellé n'est gardé que s'il reste de la place. On le remet d'abord,
+    // on mesure ensuite : sinon la mesure porterait sur l'état réduit.
+    function ajusterLibelle() {
+      b.classList.remove('court');
+      requestAnimationFrame(() => {
+        const entete = host.parentElement && host.parentElement.closest('header');
+        if (!entete || entete.children.length < 2) return;
+        const g = entete.children[0].getBoundingClientRect();
+        const d = entete.children[entete.children.length - 1].getBoundingClientRect();
+        if (g.right + 12 > d.left) b.classList.add('court');
+      });
+    }
+
     // Inséré dans le flux, il ne peut rien recouvrir : la mise en page lui fait
     // sa place. En repli, il redevient flottant.
     function ranger() {
@@ -320,10 +336,24 @@
       host.style.display = 'inline-flex';
       host.style.flex = 'none';
       host.style.alignItems = 'center';
+      // Le groupe de l'en-tête espace ses éléments de 48 px. En reprendre la
+      // moitié rapproche le bouton de la barre et rend la place au reste.
+      host.style.marginLeft = cible.apres ? '-26px' : '0';
       if (cible.apres) cible.apres.insertAdjacentElement('afterend', host);
       else cible.dans.appendChild(host);
+      ajusterLibelle();
       return true;
     }
+
+    // La place disponible change avec la largeur de la fenêtre.
+    let queued = false;
+    const surLargeur = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; if (host.isConnected) ajusterLibelle(); });
+    };
+    window.addEventListener('resize', surLargeur);
+    host.__detachLargeur = () => window.removeEventListener('resize', surLargeur);
 
     host.__ranger = ranger;
     return host;
@@ -592,7 +622,11 @@
       }, 300);
     });
     obs.observe(document.body, { childList: true, subtree: true });
-    launcher.__detach = () => { obs.disconnect(); clearTimeout(timer); };
+    launcher.__detach = () => {
+      obs.disconnect();
+      clearTimeout(timer);
+      if (launcher.__detachLargeur) launcher.__detachLargeur();
+    };
   }
 
   // Le JSON-LD peut arriver après une navigation côté client : trois essais,
