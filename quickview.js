@@ -5,7 +5,7 @@
   // Estampille de version : un rechargement d'extension laisse dans la page
   // l'état de la version d'avant, dont la forme peut différer. À version
   // différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.7.0';
+  const VERSION = '1.7.1';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -770,18 +770,25 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       if (!state.picker) { pickerBox.style.display = 'none'; return; }
       pickerBox.style.display = '';
 
+      // La saisie vit dans l'état : la barre est reconstruite à chaque ville
+      // chargée, et la recomposer effacerait ce qu'on est en train de taper.
       const search2 = document.createElement('input');
       search2.type = 'search';
       search2.placeholder = 'Chercher une ville…';
       search2.className = 'pick-search';
+      search2.value = state.pickerQuery || '';
 
       const list = el('div', 'pick-list');
 
       function fill() {
-        const q = search2.value.trim().toLowerCase();
         list.replaceChildren();
-        const index = state.cityIndex ? [...state.cityIndex.values()] : [];
-        const hits = index
+        // Le sélecteur peut s'ouvrir avant que l'index soit arrivé.
+        if (!state.cityIndex) {
+          list.appendChild(el('div', 'pick-none', 'Chargement des villes…'));
+          return;
+        }
+        const q = (state.pickerQuery || '').trim().toLowerCase();
+        const hits = [...state.cityIndex.values()]
           .filter((c) => !q || c.name.toLowerCase().includes(q))
           .slice(0, 60);
         if (!hits.length) {
@@ -803,7 +810,10 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
         }
       }
 
-      search2.addEventListener('input', fill);
+      search2.addEventListener('input', () => {
+        state.pickerQuery = search2.value;
+        fill();
+      });
       fill();
       pickerBox.append(search2, list);
       setTimeout(() => search2.focus(), 0);
@@ -1121,29 +1131,26 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
     const CONCURRENCY = 2;
 
     async function reload() {
-      // Sélection vide : l'agenda n'est pas introuvable, il n'est pas demandé.
-      if (!state.picked.length) {
-        state.cityState = new Map();
-        state.all = [];
-        buildToolbar();
-        invite();
-        return;
-      }
-
-      const merged = new Map();
       const queue = state.picked.slice();
+      const empty = !queue.length;
 
       state.cityState = new Map(queue.map((s) => [s, 'attente']));
       state.all = [];
-      paint();
+      // Sélection vide : l'agenda n'est pas introuvable, il n'est pas demandé.
+      if (empty) { buildToolbar(); invite(); } else { paint(); }
 
+      // L'index est chargé même sans ville retenue : sur l'accueil la sélection
+      // démarre vide, et sans lui le sélecteur n'aurait rien à proposer.
       const index = await cities();
       state.cityIndex = new Map(index.map((c) => [c.slug, c]));
+      buildToolbar();
+      if (empty) return;
+
+      const merged = new Map();
       const nameOf = (slug) => {
         const hit = state.cityIndex.get(slug);
         return hit ? hit.name : slug;
       };
-      buildToolbar();
 
       async function worker() {
         while (queue.length) {
