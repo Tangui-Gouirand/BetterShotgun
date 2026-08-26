@@ -5,7 +5,7 @@
   // Estampille de version : un rechargement d'extension laisse dans la page
   // l'état de la version d'avant, dont la forme peut différer. À version
   // différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.11.4';
+  const VERSION = '1.11.5';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -239,18 +239,15 @@ button { cursor: pointer; background: none; border: none; }
     const seg = location.pathname.split('/')[1] || '';
     return /^[a-z]{2}(-[a-z]{2})?$/i.test(seg) ? seg : 'fr';
   };
+  // Une ville n'est imposée que si le chemin la nomme. Toute déduction depuis
+  // la page est piégeuse : l'accueil liste Paris, Lyon et consorts dans un
+  // <nav> de bas de page, qu'on prendrait pour le contexte de la visite.
   const citySlug = () => {
     const m = location.pathname.match(CITY_RE);
-    if (m) return m[1];
-    // Page d'événement : la ville est dans le fil d'Ariane, qui vit dans un
-    // <nav> — le pied de page en propose d'autres, sans rapport.
-    for (const a of document.querySelectorAll('nav a[href*="/cities/"]')) {
-      const h = (a.getAttribute('href') || '').match(CITY_RE);
-      if (h) return h[1];
-    }
-    return null;
+    return m ? m[1] : null;
   };
   const isHome = () => HOME_RE.test(location.pathname);
+  const EVENT_RE = /^\/[^/]+\/events\/[^/]+/;
 
   async function fetchDoc(path) {
     const r = await fetch(path, { credentials: 'same-origin', headers: { Accept: 'text/html' } });
@@ -585,7 +582,10 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
 
     // Sélecteur de villes sur page de ville et accueil ; ailleurs la page porte
     // déjà sa propre liste.
-    const cityMode = Boolean(citySlug()) || isHome();
+    // Sélecteur de villes sur les pages de ville, l'accueil et les pages
+    // d'événement. Sur une salle, un artiste ou un festival, la page porte
+    // déjà sa propre liste, qu'on lit telle quelle.
+    const cityMode = Boolean(citySlug()) || isHome() || EVENT_RE.test(location.pathname);
 
     const { host, root } = SG.surface('quick-view', VIEW_CSS);
     const wrap = el('div', 'sg wrap');
