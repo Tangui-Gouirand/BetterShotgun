@@ -35,6 +35,9 @@ encore ouvert.
 
 <img width="1892" height="791" alt="image" src="https://github.com/user-attachments/assets/5c57b26a-0939-4948-a445-2e2ac7b62906" />
 
+<img width="1627" height="727" alt="image" src="https://github.com/user-attachments/assets/745994c8-0bd5-4711-9228-072c59f89bab" />
+
+
 ## Installation
 
 1. Télécharge ce dossier.
