@@ -17,25 +17,13 @@ complet — là où le site ne montre que les deux jours à venir.
 Le prix indiqué est le tarif le plus bas encore ouvert, pas forcément celui qui
 restera au moment d'acheter.
 
+<img width="1884" height="50%" alt="image" src="https://github.com/user-attachments/assets/102caded-2a1e-49fc-b9f2-ebd2b65c5aae" />
+
 ## Des pages d'événement plus lisibles
 
 Bannière allégée, billets compacts, descriptif et line-up repliés. Rien n'est
 supprimé : un clic déplie. La carte du lieu devient utilisable, avec un zoom
 réglable.
-
-## Les soirées à lieu secret
-
-Shotgun floute sa carte : l'extension la rend lisible. Elle affiche le point que
-le site publie déjà, sans prétendre que c'est celui de la soirée, et le signale
-quand ce point n'en dit pas plus que la ville.
-
-## Vie privée
-
-Elle lit ce que le site envoie déjà à ton navigateur. Rien n'est transmis, aucun
-service tiers contacté, rien enregistré sur toi.
-
-<img width="1884" height="50%" alt="image" src="https://github.com/user-attachments/assets/102caded-2a1e-49fc-b9f2-ebd2b65c5aae" />
-
 
 <table align="center">
   <tr>
@@ -51,6 +39,18 @@ service tiers contacté, rien enregistré sur toi.
     </td>
   </tr>
 </table>
+
+## Les soirées à lieu secret
+
+Shotgun floute sa carte : l'extension la rend lisible. Elle affiche le point que
+le site publie déjà, sans prétendre que c'est celui de la soirée, et le signale
+quand ce point n'en dit pas plus que la ville.
+
+## Vie privée
+
+Elle lit ce que le site envoie déjà à ton navigateur. Rien n'est transmis, aucun
+service tiers contacté, rien enregistré sur toi.
+
 
 ## Installation
 
