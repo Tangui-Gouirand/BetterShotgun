@@ -16,7 +16,7 @@ par mail le jour J »).
 La croix replie la carte sur un petit bouton, au même endroit, qui la rouvre.
 
 **Sur l'accueil et sur une page de ville, de salle ou d'artiste**, un bouton
-**Agenda complet** en bas à droite. Une page ville n'affiche que douze
+**BetterShotgun** en bas à droite. Une page ville n'affiche que douze
 événements sur deux jours et ne charge rien quand tu fais défiler ; ce bouton
 récupère l'agenda entier en une requête et l'affiche en liste dense :
 

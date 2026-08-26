@@ -364,7 +364,7 @@
   function buildLauncher(onOpen) {
     const { host, root } = SG.surface('quick-view-launcher', LAUNCH_CSS);
     const b = el('button', 'sg btn btn-accent launch');
-    b.append(icon('list'), el('span', null, 'Agenda complet'));
+    b.append(icon('list'), el('span', null, 'BetterShotgun'));
     b.addEventListener('click', onOpen);
     root.appendChild(b);
     return host;
@@ -384,6 +384,7 @@
   }
 
   let mounted = [];
+  let restores = [];
   let view = null;
   let retry = null;
 
@@ -391,6 +392,8 @@
     note('unmount', { surfaces: mounted.length });
     clearTimeout(retry);
     retry = null;
+    for (const undo of restores) { try { undo(); } catch (e) { /* déjà parti */ } }
+    restores = [];
     // Vidé avant le retrait : le réattacheur ignore un démontage volontaire.
     const hosts = mounted;
     mounted = [];
@@ -442,6 +445,69 @@
     }
   });
 
+  /* ------------------------------------------ « À propos » déployable */
+
+  const ABOUT_RE = /^(à propos|a propos|about|sobre|acerca de)$/i;
+  const ABOUT_MAX = 150;
+
+  const FOLD_CSS = `
+.fold { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px;
+  margin-top: 10px; border-radius: var(--rb); background: var(--fill); color: var(--fg);
+  font-size: 12px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; }
+.fold:hover { background: rgba(255, 255, 255, .18); }
+.fold .icon { width: 14px; height: 14px; }
+`;
+
+  // Les descriptifs font souvent plusieurs écrans et repoussent tout le reste.
+  // Seul le corps est replié ; le pied de page a lui aussi un « À propos », que
+  // sa longueur et son emplacement permettent d'écarter.
+  function foldAbout() {
+    const head = [...document.querySelectorAll('div, h2, h3')].find((n) =>
+      !n.children.length &&
+      ABOUT_RE.test((n.textContent || '').trim()) &&
+      !n.closest('footer'));
+    if (!head) return null;
+
+    const body = head.parentElement && head.parentElement.children[1];
+    if (!body || body === head) return null;
+    if ((body.textContent || '').trim().length < 300) return null;
+    if (body.getBoundingClientRect().height <= ABOUT_MAX + 60) return null;
+
+    const saved = body.getAttribute('style');
+    let open = false;
+
+    const { host, root } = SG.surface('about-fold', FOLD_CSS);
+    const btn = el('button', 'sg fold');
+    root.appendChild(btn);
+
+    function apply() {
+      if (open) {
+        body.style.maxHeight = '';
+        body.style.overflow = '';
+        body.style.maskImage = '';
+        body.style.webkitMaskImage = '';
+      } else {
+        body.style.maxHeight = ABOUT_MAX + 'px';
+        body.style.overflow = 'hidden';
+        // Dégradé plutôt qu'une coupe nette : la troncature se voit.
+        body.style.maskImage = 'linear-gradient(#000 55%, transparent)';
+        body.style.webkitMaskImage = body.style.maskImage;
+      }
+      btn.replaceChildren(icon(open ? 'minus' : 'plus'),
+        el('span', null, open ? 'Réduire' : 'Tout afficher'));
+    }
+
+    btn.addEventListener('click', () => { open = !open; apply(); });
+    apply();
+    body.insertAdjacentElement('afterend', host);
+
+    return () => {
+      host.remove();
+      if (saved === null) body.removeAttribute('style');
+      else body.setAttribute('style', saved);
+    };
+  }
+
   function mountList() {
     view = SG.quickView.create();
     const launcher = buildLauncher(() => {
@@ -465,6 +531,13 @@
     ANCHOR().appendChild(card);
     mounted.push(card);
     note('carte montée', { attempt, secret: res.secret });
+
+    // Le repli touche au DOM de la page, contrairement au reste : il est donc
+    // annulable, et l'échec ne doit pas emporter la carte.
+    try {
+      const undo = foldAbout();
+      if (undo) { restores.push(undo); note('à propos replié'); }
+    } catch (e) { note('repli impossible'); }
   }
 
   function mount() {

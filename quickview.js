@@ -5,7 +5,7 @@
   // Estampille de version : un rechargement d'extension laisse dans la page
   // l'état de la version d'avant, dont la forme peut différer. À version
   // différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.5.0';
+  const VERSION = '1.6.0';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -451,7 +451,7 @@ header { flex: 0 0 auto; padding: 16px 24px 0; border-bottom: 1px solid var(--li
 
 main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 0 24px 48px; }
 .day { position: sticky; top: 0; z-index: 2; background: var(--bg); width: max-content;
-  padding: 18px 8px 8px 0; font-size: 20px; }
+  padding: 14px 8px 6px 0; font-size: 17px; }
 
 .ev { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
   padding: 10px; border-radius: var(--r); text-decoration: none; color: inherit; }
@@ -479,15 +479,19 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
 .ev .p.sold { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .7px;
   text-transform: uppercase; }
 
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 20px; }
-.grid .ev { flex-direction: column; align-items: stretch; gap: 8px; padding: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 8px 12px; }
+.grid .ev { flex-direction: column; align-items: stretch; gap: 5px; padding: 0 0 6px; }
 .grid .ev:hover, .grid .ev.cur { background: none; }
 .grid .ev:hover .thumb, .grid .ev.cur .thumb { outline: 2px solid var(--accent); }
-.grid .thumb { width: 100%; height: 128px; }
-.grid .h { flex: none; color: var(--accent); font-size: 13px; }
+.grid .thumb { width: 100%; aspect-ratio: 16 / 10; height: auto; }
+.grid .h { flex: none; color: var(--accent); font-size: 11px; letter-spacing: .3px; }
 .grid .g { display: none; }
-.grid .p { flex: none; text-align: left; }
-.grid .t { white-space: normal; line-height: 1.25; }
+.grid .p { flex: none; text-align: left; font-size: 13px; }
+/* Deux lignes de titre au plus : sans cette borne, une soirée au nom à
+   rallonge décale toute sa rangée. */
+.grid .t { font-size: 14px; line-height: 1.25; white-space: normal;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.grid .v { font-size: 12px; }
 
 .state { display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 14px; padding: 90px 20px; color: var(--muted); text-align: center; }
@@ -509,7 +513,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       genres: new Set(),
       hideSold: false,
       sort: 'date',
-      view: 'list',
+      view: 'grid',
       cursor: -1,
       loaded: false,
       // Multi-villes : la sélection, et l'état de chargement de chacune.
@@ -531,7 +535,7 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
 
     const top = el('div', 'top');
     const brand = el('div', 'brand title-font');
-    brand.append(el('em', null, 'Agenda'), document.createTextNode(' complet'));
+    brand.append(el('em', null, 'Better'), document.createTextNode('Shotgun'));
     const count = el('div', 'count', '');
     const close = el('button', 'close');
     close.title = 'Fermer (Échap)';
