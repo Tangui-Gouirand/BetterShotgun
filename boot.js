@@ -257,82 +257,75 @@
   /* ------------------------------------------------------- lanceur */
 
   const LAUNCH_CSS = `
-.launch { position: fixed; z-index: 2147483645; height: 40px; padding: 0 16px;
-  font-size: 12px; box-shadow: 0 6px 22px rgba(0, 0, 0, .45); }
-/* Dans l'en-tête : même sobriété que « Explorer », l'accent sur la seule
-   icône. Le libellé ne tiendrait pas dans la place disponible. */
-.launch.dock { width: 40px; padding: 0; background: none; color: var(--fg);
+.launch { height: 40px; padding: 0 14px; font-size: 12px; white-space: nowrap; }
+/* Rangé dans la mise en page du site : sobriété de « Explorer », accent sur
+   la seule icône, et c'est le flux qui réserve la place. */
+.launch.range { width: 40px; padding: 0; background: none; color: var(--fg);
   box-shadow: none; }
-.launch.dock:hover { background: var(--fill); }
-.launch.dock .icon { width: 18px; height: 18px; color: var(--accent); }
-.launch.dock .lbl { display: none; }
-/* Repli : en-tête absent, plein, ou sorti de l'écran. */
-.launch.coin { right: 20px; bottom: 20px; left: auto; top: auto; }
-@media (max-width: 900px) { .launch.coin .lbl { display: none; } .launch.coin { padding: 0 12px; } }
+.launch.range:hover { background: var(--fill); }
+.launch.range .icon { width: 18px; height: 18px; color: var(--accent); }
+/* Le libellé coûte 162 px que l'en-tête n'a pas : avec lui, « Je suis
+   organisateur » passe sur deux lignes. */
+.launch.range .lbl { display: none; }
+/* Repli : barre de recherche introuvable, ou insertion refusée. */
+.launch.coin { position: fixed; right: 20px; bottom: 20px; z-index: 2147483645;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .45); }
+@media (max-width: 900px) { .launch .lbl { display: none; } .launch { padding: 0 12px; } }
 `;
 
-  // On se range après le dernier élément du groupe de gauche — le bouton
-  // « Explorer » — et non contre la barre de recherche, qui n'est pas le
-  // dernier : s'y coller passait par-dessus lui.
-  const LARGEUR_DOCK = 40;
-  const MARGE_DOCK = 12;
+  const RECHERCHE_RE = /recherch|search|buscar|pesquis/i;
 
-  function placeDock() {
-    const head = document.querySelector('header');
-    if (!head || head.children.length < 2) return null;
-    const gauche = head.children[0];
-    const droite = head.children[head.children.length - 1];
-    const ancre = gauche.children[gauche.children.length - 1];
-    if (!ancre) return null;
+  // Où se ranger selon la page. L'en-tête porte la barre sur l'accueil et les
+  // pages de ville ; la page de recherche n'a pas d'en-tête et sa barre occupe
+  // toute la largeur, on se range alors dedans.
+  function ancreRecherche() {
+    const champ = [...document.querySelectorAll('input')]
+      .find((i) => RECHERCHE_RE.test(i.getAttribute('placeholder') || ''));
+    if (!champ) return null;
 
-    const a = ancre.getBoundingClientRect();
-    const d = droite.getBoundingClientRect();
-    if (a.bottom < 0 || a.top > window.innerHeight) return null;
+    const entete = champ.closest('header');
+    if (entete && entete.children.length) {
+      const groupe = entete.children[0];
+      let n = champ;
+      while (n && n.parentElement !== groupe) n = n.parentElement;
+      if (n) return { apres: n };
+    }
 
-    const libre = d.left - a.right;
-    if (libre < LARGEUR_DOCK + MARGE_DOCK * 2) return null;
-    return { left: Math.round(a.right + MARGE_DOCK), top: Math.round(a.top + (a.height - 40) / 2) };
+    const barre = champ.parentElement;
+    if (barre && getComputedStyle(barre).display.includes('flex')) return { dans: barre };
+    return null;
   }
 
-  // Le bouton se range contre la barre de recherche du site plutôt que de
-  // flotter dans un coin. L'en-tête n'est pas fixe : il défile, donc on suit.
   function buildLauncher(onOpen) {
     const { host, root } = SG.surface('quick-view-launcher', LAUNCH_CSS);
-    const b = el('button', 'sg btn btn-accent launch coin');
+    const b = el('button', 'sg btn btn-accent launch');
     b.title = 'Recherche avancée dans l’agenda';
     b.append(icon('advSearch'), el('span', 'lbl', 'BetterShotgun'));
     b.addEventListener('click', onOpen);
     root.appendChild(b);
 
-    let queued = false;
-    function place() {
-      queued = false;
-      const pos = placeDock();
-      if (!pos) {
-        b.classList.remove('dock');
+    // Inséré dans le flux, il ne peut rien recouvrir : la mise en page lui fait
+    // sa place. En repli, il redevient flottant.
+    function ranger() {
+      const cible = ancreRecherche();
+      if (!cible) {
+        b.classList.remove('range');
         b.classList.add('coin');
-        b.style.left = '';
-        b.style.top = '';
-        return;
+        if (host.parentElement !== ANCHOR()) ANCHOR().appendChild(host);
+        host.style.display = '';
+        return false;
       }
+      b.classList.add('range');
       b.classList.remove('coin');
-      b.classList.add('dock');
-      b.style.left = pos.left + 'px';
-      b.style.top = pos.top + 'px';
+      host.style.display = 'inline-flex';
+      host.style.flex = 'none';
+      host.style.alignItems = 'center';
+      if (cible.apres) cible.apres.insertAdjacentElement('afterend', host);
+      else cible.dans.appendChild(host);
+      return true;
     }
-    const follow = () => {
-      if (queued) return;
-      queued = true;
-      requestAnimationFrame(place);
-    };
-    window.addEventListener('scroll', follow, { passive: true });
-    window.addEventListener('resize', follow);
-    host.__detach = () => {
-      window.removeEventListener('scroll', follow);
-      window.removeEventListener('resize', follow);
-    };
 
-    setTimeout(place, 0);
+    host.__ranger = ranger;
     return host;
   }
 
@@ -576,12 +569,30 @@
 
   function mountList() {
     view = SG.quickView.create();
+    let visible = true;
     const launcher = buildLauncher(() => {
-      launcher.style.display = 'none';
-      view.show({ onHide: () => { launcher.style.display = ''; } });
+      visible = false;
+      launcher.style.visibility = 'hidden';
+      view.show({ onHide: () => { visible = true; launcher.style.visibility = ''; } });
     });
-    ANCHOR().appendChild(launcher);
+    launcher.__ranger();
     mounted.push(launcher);
+
+    // Le bouton vit dans le DOM de la page : un re-rendu peut l'emporter.
+    // On le repose, plafonné pour ne pas lutter en boucle.
+    let left = 4;
+    let timer = null;
+    const obs = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (launcher.isConnected || left-- <= 0) return;
+        note('bouton retiré, reposé');
+        launcher.__ranger();
+        if (!visible) launcher.style.visibility = 'hidden';
+      }, 300);
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+    launcher.__detach = () => { obs.disconnect(); clearTimeout(timer); };
   }
 
   // Le JSON-LD peut arriver après une navigation côté client : trois essais,
