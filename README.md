@@ -5,7 +5,7 @@ Extension Chrome pour [shotgun.live](https://shotgun.live)
 ## Tout l'agenda d'un coup
 
 Un bouton **BetterShotgun**, à droite de la barre de recherche, ouvre l'agenda
-complet — là où le site ne montre que les deux jours à venir.
+complet, là où le site ne montre que les deux jours à venir.
 
 - **Plusieurs villes à la fois** : ajoute Lyon à Marseille, compare, décide.
 - **Cherche** dans les titres, les salles et les genres.
