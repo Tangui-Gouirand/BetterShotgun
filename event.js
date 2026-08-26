@@ -108,6 +108,50 @@
       Math.abs(lat - a) < 0.0005 && Math.abs(lon - b) < 0.0005);
   }
 
+  /* ------------------------------------------------ fiche de l'événement */
+
+  function findEvent(node, depth = 0) {
+    if (!node || typeof node !== 'object' || depth > 12) return null;
+    if (Array.isArray(node)) {
+      for (const it of node) {
+        const h = findEvent(it, depth + 1);
+        if (h) return h;
+      }
+      return null;
+    }
+    if (typeof node['@type'] === 'string' && /Event/i.test(node['@type'])) return node;
+    for (const k of Object.keys(node)) {
+      const h = findEvent(node[k], depth + 1);
+      if (h) return h;
+    }
+    return null;
+  }
+
+  function eventNode() {
+    for (const data of eachJsonLd()) {
+      const hit = findEvent(data);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  const asList = (v) => (Array.isArray(v) ? v : (v ? [v] : []));
+
+  // `availability` vaut une URL schema.org : on n'en garde que le dernier
+  // segment, InStock, LimitedAvailability ou SoldOut.
+  function readOffers(raw) {
+    return asList(raw).map((o) => ({
+      name: str(o && o.name),
+      price: toCoord(o && o.price),
+      state: str(o && o.availability) ? String(o.availability).split('/').pop() : null
+    })).filter((o) => o.name || o.price !== null);
+  }
+
+  function readDate(v) {
+    const d = str(v) ? new Date(v) : null;
+    return d && !Number.isNaN(d.getTime()) ? d : null;
+  }
+
   function eventTitle() {
     const og = document.querySelector('meta[property="og:title"]');
     const c = og && str(og.getAttribute('content'));
@@ -216,11 +260,17 @@
       const geo = fromJsonLd();
       if (!geo) return { found: false };
       const secret = isSecret(geo);
+      const node = eventNode() || {};
       return {
         found: true,
-        title: eventTitle(),
+        title: str(node.name) || eventTitle(),
         secret,
         cityCentroid: isKnownCentroid(geo.lat, geo.lon),
+        start: readDate(node.startDate),
+        end: readDate(node.endDate),
+        offers: readOffers(node.offers),
+        performers: asList(node.performer).map((p) => str(p && p.name)).filter(Boolean),
+        organizer: str(node.organizer && node.organizer.name),
         // Le canal de révélation n'a d'intérêt que sur un lieu non divulgué.
         guidance: secret ? extractGuidance(eventDescription()) : null,
         ...geo

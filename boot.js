@@ -116,10 +116,28 @@
 .tab:hover { border-color: var(--accent); background: #232323; }
 .tab .icon { width: 20px; height: 20px; }
 
-.venue { font-size: 17px; font-weight: 700; line-height: 1.25; }
-.venue-sm { color: var(--muted); font-size: 13px; line-height: 1.3;
+.evt-title { font-size: 16px; font-weight: 700; line-height: 1.25;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.when { color: var(--accent); font-size: 13px; font-weight: 700; margin-top: 4px; }
+.where { color: var(--muted); font-size: 13px; margin-top: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .addr { color: var(--muted); font-size: 14px; margin-top: 3px; word-break: break-word; }
+
+/* Catégories de billets : une ligne chacune, l'état en pastille. */
+.tier { display: flex; align-items: center; gap: 10px; padding: 5px 0;
+  border-bottom: 1px solid var(--line); font-size: 13px; }
+.tier:last-of-type { border-bottom: none; }
+.tier .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.tier .pr { font-weight: 700; font-variant-numeric: tabular-nums; }
+.tier .dot { width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: var(--muted); }
+.tier .dot.ok { background: var(--success); }
+.tier .dot.few { background: var(--accent); }
+.tier .dot.out { background: rgba(255, 255, 255, .25); }
+.tier.gone .nm, .tier.gone .pr { color: var(--muted); text-decoration: line-through; }
+.more { color: var(--muted); font-size: 11.5px; margin-top: 6px; }
+.lineup { color: var(--muted); font-size: 12.5px; line-height: 1.45; margin-top: 8px; }
 .note { color: var(--muted); font-size: 13px; line-height: 1.45; margin-top: 10px;
   border-left: 2px solid var(--accent); padding-left: 10px; }
 .mapbox { position: relative; margin-top: 12px; }
@@ -206,6 +224,58 @@
     return box;
   }
 
+  const FMT_DAY = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+  const FMT_H = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+  function fmtWhen(res) {
+    if (!res.start) return null;
+    const jour = FMT_DAY.format(res.start);
+    const debut = FMT_H.format(res.start);
+    return res.end ? jour + ' · ' + debut + ' → ' + FMT_H.format(res.end)
+      : jour + ' · ' + debut;
+  }
+
+  const TIER_MAX = 6;
+  const TIER_STATE = {
+    InStock: ['ok', 'En vente'],
+    LimitedAvailability: ['few', 'Presque complet'],
+    SoldOut: ['out', 'Épuisé'],
+    PreOrder: ['ok', 'Prévente'],
+    PreSale: ['ok', 'Prévente']
+  };
+
+  // Les catégories viennent du JSON-LD, pas du DOM : leur état y est explicite,
+  // là où la page se contente d'un « Épuisé » sur certaines.
+  function addTiers(card, res) {
+    const tiers = res.offers || [];
+    if (!tiers.length) return;
+
+    card.appendChild(el('div', 'sect title-font', 'Billets'));
+    for (const t of tiers.slice(0, TIER_MAX)) {
+      const [cls, label] = TIER_STATE[t.state] || ['', ''];
+      const row = el('div', 'tier' + (cls === 'out' ? ' gone' : ''));
+      row.appendChild(el('span', 'nm', t.name || 'Catégorie'));
+      row.appendChild(el('span', 'pr', t.price === null ? '—'
+        : (t.price === 0 ? 'Gratuit'
+          : (Number.isInteger(t.price) ? t.price : t.price.toFixed(2).replace('.', ',')) + ' €')));
+      const dot = el('span', 'dot ' + cls);
+      if (label) dot.title = label;
+      row.appendChild(dot);
+      card.appendChild(row);
+    }
+    if (tiers.length > TIER_MAX) {
+      card.appendChild(el('div', 'more', '+ ' + (tiers.length - TIER_MAX) + ' autres catégories'));
+    }
+  }
+
+  function addLineup(card, res) {
+    const noms = res.performers || [];
+    if (!noms.length) return;
+    card.appendChild(el('div', 'sect title-font', 'Line up'));
+    card.appendChild(el('div', 'lineup', noms.slice(0, 12).join(' · ') +
+      (noms.length > 12 ? ' · +' + (noms.length - 12) : '')));
+  }
+
   function buildCard(res) {
     const { host, root } = SG.surface('venue-card', CARD_CSS);
     const card = el('div', 'sg card');
@@ -236,25 +306,33 @@
     head.appendChild(x);
     card.appendChild(head);
 
+    if (res.title) card.appendChild(el('div', 'evt-title', res.title));
+    const when = fmtWhen(res);
+    if (when) card.appendChild(el('div', 'when', when));
+
     if (res.secret) {
-      card.appendChild(el('div', 'venue', res.city || 'Lieu non divulgué'));
-      if (res.postalCode) card.appendChild(el('div', 'addr', res.postalCode));
+      card.appendChild(el('div', 'where', res.city
+        ? (res.postalCode ? res.city + ' · ' + res.postalCode : res.city)
+        : 'Lieu non divulgué'));
       card.appendChild(el('div', 'note',
         res.cityCentroid
-          ? 'Shotgun ne publie pas l’adresse. Les coordonnées ci-dessous sont le ' +
-            'centre-ville de référence : elles ne disent rien du lieu réel.'
-          : 'Shotgun ne publie pas l’adresse, mais il publie ce point. La carte ' +
-            'de la page le montre flouté et dézoomé ; le voici lisible.'));
+          ? 'Shotgun ne publie pas l’adresse. Les coordonnées sont le centre-ville ' +
+            'de référence : elles ne disent rien du lieu réel.'
+          : 'Shotgun ne publie pas l’adresse, mais il publie ce point. La carte de ' +
+            'la page le montre flouté et dézoomé ; le voici lisible.'));
+    } else {
+      card.appendChild(el('div', 'where',
+        [res.venue, res.postalCode && res.city ? res.postalCode + ' ' + res.city : res.city]
+          .filter(Boolean).join(' · ')));
+    }
 
-      // Un centre-ville de référence n'apprend rien : pas de carte dans ce cas.
-      if (!res.cityCentroid) {
-        card.appendChild(mapImage(res));
+    // Un centre-ville de référence n'apprend rien : pas de carte dans ce cas.
+    if (!res.cityCentroid) {
+      card.appendChild(mapImage(res));
+      if (res.secret) {
         card.appendChild(el('div', 'mapcap',
           'Point publié par Shotgun, pas une adresse confirmée.'));
       }
-    } else if (res.venue) {
-      // La page affiche déjà salle et adresse : on ne montre que ce qui manque.
-      card.appendChild(el('div', 'venue-sm', res.venue));
     }
 
     /* coordonnées + copie */
@@ -276,6 +354,9 @@
     coord.appendChild(copy);
     card.appendChild(coord);
 
+    addTiers(card, res);
+    addLineup(card, res);
+
     /* actions */
 
     const acts = el('div', 'acts');
@@ -287,13 +368,22 @@
     maps.append(icon('pin'), el('span', null, 'Maps'));
     acts.appendChild(maps);
 
+    // On est déjà sur la page : le bouton y descend plutôt que d'y mener.
+    const list = findTicketList();
+    if (list) {
+      const go = el('button', 'btn', 'Billets');
+      go.addEventListener('click', () => list.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+      acts.appendChild(go);
+    }
+
     // Sur un point générique, l'adresse renvoyée serait inventée. Sur demande
     // seulement : c'est la seule requête vers un tiers.
     if (!res.secret) {
-      const check = el('button', 'btn', 'Vérifier (OSM)');
+      const check = el('button', 'btn', 'OSM');
+      check.title = 'Vérifier l’adresse auprès d’OpenStreetMap';
       check.addEventListener('click', async () => {
         check.disabled = true;
-        check.textContent = 'Vérification…';
+        check.textContent = '…';
         const geo = await reverseGeocode(res.lat, res.lon);
         check.remove();
         card.appendChild(el('div', 'osm', geo.error
@@ -526,13 +616,19 @@
   // Une case de billet fait 240 px, dont la moitié pour un descriptif que
   // personne ne lit deux fois. Marges resserrées, descriptif borné à deux
   // lignes et dépliable au clic, catégories épuisées estompées.
-  function compactTickets() {
-    const list = [...document.querySelectorAll('div')].find((c) => {
+  // Le conteneur dont tous les enfants portent un prix : c'est la liste des
+  // catégories, qu'aucune classe ne désigne.
+  function findTicketList() {
+    return [...document.querySelectorAll('div')].find((c) => {
       const kids = [...c.children];
       if (kids.length < 2 || kids.length > 12) return false;
       return kids.every((k) => PRICE_RE.test(k.textContent || '') &&
         k.getBoundingClientRect().height > 60);
-    });
+    }) || null;
+  }
+
+  function compactTickets() {
+    const list = findTicketList();
     if (!list) return null;
 
     const undos = [];
