@@ -32,6 +32,9 @@ récupère l'agenda entier en une requête et l'affiche en liste dense :
 Le prix affiché est celui des cartes Shotgun, c'est-à-dire le tarif le plus bas
 encore ouvert.
 
+
+<img width="1892" height="791" alt="image" src="https://github.com/user-attachments/assets/5c57b26a-0939-4948-a445-2e2ac7b62906" />
+
 ## Installation
 
 1. Télécharge ce dossier.
