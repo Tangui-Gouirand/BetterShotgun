@@ -5,7 +5,7 @@
   // Estampille de version : un rechargement d'extension laisse dans la page
   // l'état de la version d'avant, dont la forme peut différer. À version
   // différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.10.0';
+  const VERSION = '1.10.1';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -83,6 +83,9 @@ button { cursor: pointer; background: none; border: none; }
       'M1 14h6', 'M9 8h6', 'M17 16h6'],
     close: ['M18 6 6 18', 'm6 6 12 12'],
     search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z', 'm21 21-4.3-4.3'],
+    // Loupe barrée de curseurs : une recherche avancée.
+    advSearch: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z', 'm21 21-4.3-4.3',
+      'M8 9.5h6', 'M8 13h6', 'M12.5 8v3', 'M9.5 11.5v3'],
     copy: ['M9 9h10v12H9z', 'M5 15H4V3h12v1'],
     check: ['m4 12 5 5L20 6'],
     warn: ['M12 9v4', 'M12 17h.01', 'M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z'],

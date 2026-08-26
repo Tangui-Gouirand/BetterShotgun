@@ -257,16 +257,60 @@
   /* ------------------------------------------------------- lanceur */
 
   const LAUNCH_CSS = `
-.launch { position: fixed; right: 20px; bottom: 20px; z-index: 2147483645;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, .5); }
+.launch { position: fixed; z-index: 2147483645; height: 40px; padding: 0 16px;
+  font-size: 12px; box-shadow: 0 6px 22px rgba(0, 0, 0, .45); }
+/* Repli : quand la barre de recherche n'est pas là ou plus en vue. */
+.launch.coin { right: 20px; bottom: 20px; left: auto; top: auto; }
+@media (max-width: 900px) { .launch .lbl { display: none; } .launch { padding: 0 12px; } }
 `;
 
+  const RECHERCHE_RE = /recherch|search|buscar|pesquis/i;
+
+  function champRecherche() {
+    const i = [...document.querySelectorAll('header input')]
+      .find((n) => RECHERCHE_RE.test(n.getAttribute('placeholder') || ''));
+    return i ? i.parentElement : null;
+  }
+
+  // Le bouton se range contre la barre de recherche du site plutôt que de
+  // flotter dans un coin. L'en-tête n'est pas fixe : il défile, donc on suit.
   function buildLauncher(onOpen) {
     const { host, root } = SG.surface('quick-view-launcher', LAUNCH_CSS);
-    const b = el('button', 'sg btn btn-accent launch');
-    b.append(icon('list'), el('span', null, 'BetterShotgun'));
+    const b = el('button', 'sg btn btn-accent launch coin');
+    b.title = 'Recherche avancée dans l’agenda';
+    b.append(icon('advSearch'), el('span', 'lbl', 'BetterShotgun'));
     b.addEventListener('click', onOpen);
     root.appendChild(b);
+
+    let queued = false;
+    function place() {
+      queued = false;
+      const box = champRecherche();
+      const r = box && box.getBoundingClientRect();
+      // Barre absente, repliée, ou sortie de l'écran : retour au coin.
+      if (!r || r.width < 120 || r.bottom < 0 || r.top > window.innerHeight) {
+        b.classList.add('coin');
+        b.style.left = '';
+        b.style.top = '';
+        return;
+      }
+      b.classList.remove('coin');
+      b.style.left = Math.round(r.right + 8) + 'px';
+      b.style.top = Math.round(r.top + (r.height - b.offsetHeight) / 2) + 'px';
+    }
+    const follow = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(place);
+    };
+    window.addEventListener('scroll', follow, { passive: true });
+    window.addEventListener('resize', follow);
+    host.__detach = () => {
+      window.removeEventListener('scroll', follow);
+      window.removeEventListener('resize', follow);
+    };
+
+    setTimeout(place, 0);
     return host;
   }
 
@@ -297,7 +341,10 @@
     // Vidé avant le retrait : le réattacheur ignore un démontage volontaire.
     const hosts = mounted;
     mounted = [];
-    for (const h of hosts) h.remove();
+    for (const h of hosts) {
+      if (typeof h.__detach === 'function') h.__detach();
+      h.remove();
+    }
     if (view) { view.destroy(); view = null; }
   }
 
