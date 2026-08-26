@@ -508,6 +508,77 @@
     };
   }
 
+  /* ------------------------------------------------- cases de billets */
+
+  const PRICE_RE = /\d+[,.]\d{2}\s*€|\bgratuit\b|\bfree\b/i;
+  const SOLD_RE = /\b(épuisé|complet|sold\s?out|esgotado)\b/i;
+
+  // Applique un style en gardant de quoi revenir en arrière.
+  function restyle(node, styles, undos) {
+    const saved = node.getAttribute('style');
+    Object.assign(node.style, styles);
+    undos.push(() => {
+      if (saved === null) node.removeAttribute('style');
+      else node.setAttribute('style', saved);
+    });
+  }
+
+  // Une case de billet fait 240 px, dont la moitié pour un descriptif que
+  // personne ne lit deux fois. Marges resserrées, descriptif borné à deux
+  // lignes et dépliable au clic, catégories épuisées estompées.
+  function compactTickets() {
+    const list = [...document.querySelectorAll('div')].find((c) => {
+      const kids = [...c.children];
+      if (kids.length < 2 || kids.length > 12) return false;
+      return kids.every((k) => PRICE_RE.test(k.textContent || '') &&
+        k.getBoundingClientRect().height > 60);
+    });
+    if (!list) return null;
+
+    const undos = [];
+    for (const card of list.children) {
+      // Un seul appel : deux `restyle` sur le même nœud feraient capturer à la
+      // seconde sauvegarde un style déjà modifié.
+      const sold = SOLD_RE.test(card.textContent || '');
+      restyle(card, sold ? { padding: '13px 16px', opacity: '.55' }
+        : { padding: '13px 16px' }, undos);
+
+      const desc = card.querySelector('[class*="whitespace-pre-line"]');
+      if (!desc || desc.getBoundingClientRect().height < 48) continue;
+
+      let open = false;
+      const fold = () => {
+        Object.assign(desc.style, open ? {
+          display: '', webkitLineClamp: '', webkitBoxOrient: '', overflow: '', cursor: 'pointer'
+        } : {
+          display: '-webkit-box', webkitLineClamp: '2', webkitBoxOrient: 'vertical',
+          overflow: 'hidden', cursor: 'pointer'
+        });
+      };
+      const saved = desc.getAttribute('style');
+      undos.push(() => {
+        if (saved === null) desc.removeAttribute('style');
+        else desc.setAttribute('style', saved);
+      });
+
+      // La case entière est cliquable et mène à l'achat : le clic sur le
+      // descriptif doit s'arrêter là, sinon déplier un texte lance la commande.
+      // `mousedown` est arrêté aussi, certains gabarits agissant dès l'appui.
+      desc.title = 'Cliquer pour tout lire';
+      const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
+      desc.addEventListener('mousedown', swallow);
+      desc.addEventListener('click', (e) => {
+        swallow(e);
+        open = !open;
+        fold();
+      });
+      fold();
+    }
+
+    if (!undos.length) return null;
+    return () => { for (const fn of undos) fn(); };
+  }
+
   function mountList() {
     view = SG.quickView.create();
     const launcher = buildLauncher(() => {
@@ -534,10 +605,12 @@
 
     // Le repli touche au DOM de la page, contrairement au reste : il est donc
     // annulable, et l'échec ne doit pas emporter la carte.
-    try {
-      const undo = foldAbout();
-      if (undo) { restores.push(undo); note('à propos replié'); }
-    } catch (e) { note('repli impossible'); }
+    for (const [nom, fn] of [['à propos', foldAbout], ['billets', compactTickets]]) {
+      try {
+        const undo = fn();
+        if (undo) { restores.push(undo); note(nom + ' : resserré'); }
+      } catch (e) { note(nom + ' : impossible'); }
+    }
   }
 
   function mount() {

@@ -5,7 +5,7 @@
   // Estampille de version : un rechargement d'extension laisse dans la page
   // l'état de la version d'avant, dont la forme peut différer. À version
   // différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.6.0';
+  const VERSION = '1.6.1';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
