@@ -567,7 +567,7 @@
     return () => { for (const fn of undos) fn(); };
   }
 
-  function mountList() {
+  function mountLauncher() {
     view = SG.quickView.create();
     let visible = true;
     const launcher = buildLauncher(() => {
@@ -662,8 +662,10 @@
     heals = 0;
     const kind = kindOf(location.pathname);
     note('mount', { kind: kind || 'aucun' });
-    if (kind === 'event') mountEvent();
-    else if (kind === 'list') mountList();
+    // Le bouton vaut aussi sur une page d'événement : l'agenda s'y ouvre sur la
+    // ville de la soirée, lue dans le fil d'Ariane.
+    if (kind === 'event') { mountEvent(); mountLauncher(); }
+    else if (kind === 'list') mountLauncher();
   }
 
   /* ------------------------------------------------------ navigation */

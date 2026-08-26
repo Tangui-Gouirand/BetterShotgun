@@ -5,7 +5,7 @@
   // Estampille de version : un rechargement d'extension laisse dans la page
   // l'état de la version d'avant, dont la forme peut différer. À version
   // différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.11.0';
+  const VERSION = '1.11.1';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -241,7 +241,14 @@ button { cursor: pointer; background: none; border: none; }
   };
   const citySlug = () => {
     const m = location.pathname.match(CITY_RE);
-    return m ? m[1] : null;
+    if (m) return m[1];
+    // Page d'événement : la ville est dans le fil d'Ariane, qui vit dans un
+    // <nav> — le pied de page en propose d'autres, sans rapport.
+    for (const a of document.querySelectorAll('nav a[href*="/cities/"]')) {
+      const h = (a.getAttribute('href') || '').match(CITY_RE);
+      if (h) return h[1];
+    }
+    return null;
   };
   const isHome = () => HOME_RE.test(location.pathname);
 
