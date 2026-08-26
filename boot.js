@@ -259,17 +259,39 @@
   const LAUNCH_CSS = `
 .launch { position: fixed; z-index: 2147483645; height: 40px; padding: 0 16px;
   font-size: 12px; box-shadow: 0 6px 22px rgba(0, 0, 0, .45); }
-/* Repli : quand la barre de recherche n'est pas là ou plus en vue. */
+/* Dans l'en-tête : même sobriété que « Explorer », l'accent sur la seule
+   icône. Le libellé ne tiendrait pas dans la place disponible. */
+.launch.dock { width: 40px; padding: 0; background: none; color: var(--fg);
+  box-shadow: none; }
+.launch.dock:hover { background: var(--fill); }
+.launch.dock .icon { width: 18px; height: 18px; color: var(--accent); }
+.launch.dock .lbl { display: none; }
+/* Repli : en-tête absent, plein, ou sorti de l'écran. */
 .launch.coin { right: 20px; bottom: 20px; left: auto; top: auto; }
-@media (max-width: 900px) { .launch .lbl { display: none; } .launch { padding: 0 12px; } }
+@media (max-width: 900px) { .launch.coin .lbl { display: none; } .launch.coin { padding: 0 12px; } }
 `;
 
-  const RECHERCHE_RE = /recherch|search|buscar|pesquis/i;
+  // On se range après le dernier élément du groupe de gauche — le bouton
+  // « Explorer » — et non contre la barre de recherche, qui n'est pas le
+  // dernier : s'y coller passait par-dessus lui.
+  const LARGEUR_DOCK = 40;
+  const MARGE_DOCK = 12;
 
-  function champRecherche() {
-    const i = [...document.querySelectorAll('header input')]
-      .find((n) => RECHERCHE_RE.test(n.getAttribute('placeholder') || ''));
-    return i ? i.parentElement : null;
+  function placeDock() {
+    const head = document.querySelector('header');
+    if (!head || head.children.length < 2) return null;
+    const gauche = head.children[0];
+    const droite = head.children[head.children.length - 1];
+    const ancre = gauche.children[gauche.children.length - 1];
+    if (!ancre) return null;
+
+    const a = ancre.getBoundingClientRect();
+    const d = droite.getBoundingClientRect();
+    if (a.bottom < 0 || a.top > window.innerHeight) return null;
+
+    const libre = d.left - a.right;
+    if (libre < LARGEUR_DOCK + MARGE_DOCK * 2) return null;
+    return { left: Math.round(a.right + MARGE_DOCK), top: Math.round(a.top + (a.height - 40) / 2) };
   }
 
   // Le bouton se range contre la barre de recherche du site plutôt que de
@@ -285,18 +307,18 @@
     let queued = false;
     function place() {
       queued = false;
-      const box = champRecherche();
-      const r = box && box.getBoundingClientRect();
-      // Barre absente, repliée, ou sortie de l'écran : retour au coin.
-      if (!r || r.width < 120 || r.bottom < 0 || r.top > window.innerHeight) {
+      const pos = placeDock();
+      if (!pos) {
+        b.classList.remove('dock');
         b.classList.add('coin');
         b.style.left = '';
         b.style.top = '';
         return;
       }
       b.classList.remove('coin');
-      b.style.left = Math.round(r.right + 8) + 'px';
-      b.style.top = Math.round(r.top + (r.height - b.offsetHeight) / 2) + 'px';
+      b.classList.add('dock');
+      b.style.left = pos.left + 'px';
+      b.style.top = pos.top + 'px';
     }
     const follow = () => {
       if (queued) return;
