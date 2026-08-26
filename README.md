@@ -2,61 +2,37 @@
 
 Extension Chrome pour [shotgun.live](https://shotgun.live)
 
-## Ce qu'elle ajoute
+## Tout l'agenda d'un coup
 
-**Sur une page d'événement**, elle resserre la page au lieu d'ajouter une
-fenêtre par-dessus. Sur un événement réel, la page passe de 3 874 à 3 089 px :
+Un bouton **BetterShotgun**, à droite de la barre de recherche, ouvre l'agenda
+complet — là où le site ne montre que les deux jours à venir.
 
-- la bannière descend de 412 à 285 px, l'affiche est réduite sans être rognée ;
-- une case de billet passe de 240 à 96 px, son descriptif tient sur une ligne
-  et se déplie au clic ;
-- le descriptif de la soirée et le line-up sont repliés, les organisateurs
-  passent côte à côte ;
-- la carte du lieu est reprise et rendue lisible : zoom utile, marqueur, et des
-  boutons pour zoomer.
+- **Plusieurs villes à la fois** : ajoute Lyon à Marseille, compare, décide.
+- **Cherche** dans les titres, les salles et les genres.
+- **Filtre** par ce soir, demain, le week-end, sept jours, ou par prix.
+- **Trie** par date ou par prix, en affiches ou en liste.
+- **Au clavier** : `/` chercher · `↑` `↓` parcourir · `Entrée` ouvrir · `Échap`
+  fermer.
 
-Sur un **lieu non divulgué**, Shotgun floute sa carte et la dézoome. Le flou est
-du CSS et la coordonnée est publiée en clair dans les données de la page :
-l'extension la rend simplement lisible, sans rien deviner. Elle ne prétend pas
-qu'il s'agit de l'adresse, parce que rien ne le dit.
+Le prix indiqué est le tarif le plus bas encore ouvert, pas forcément celui qui
+restera au moment d'acheter.
 
-**Sur l'accueil, la recherche, et les pages de ville, de salle ou d'artiste**,
-une loupe apparaît dans l'en-tête, à droite de la barre de recherche. Une page
-ville n'affiche que douze événements sur deux jours et ne charge rien quand tu
-fais défiler ; ce bouton récupère l'agenda entier en une requête et l'affiche
-en grille dense :
+## Des pages d'événement plus lisibles
 
-- **plusieurs villes à la fois** : l'agenda s'ouvre sur la ville de la page, et
-  sur l'accueil il s'ouvre vide, à toi de composer. Les villes s'ajoutent au
-  sélecteur et se chargent au fur et à mesure, sans attendre les autres ;
-- recherche instantanée sur le titre, la salle et le genre ;
-- filtres ce soir / demain / week-end / 7 jours, et un curseur de prix ;
-- les douze genres les plus présents, cumulables ;
-- tri par date ou par prix, grille d'affiches ou liste dense ;
-- les filtres se replient derrière un bouton, d'emblée sur écran étroit ;
-- au clavier : `/` chercher, `↑` `↓` parcourir, `Entrée` ouvrir, `Échap` fermer.
+Bannière allégée, billets compacts, descriptif et line-up repliés. Rien n'est
+supprimé : un clic déplie. La carte du lieu devient utilisable, avec un zoom
+réglable.
 
-Le prix affiché est celui des cartes Shotgun, c'est-à-dire le tarif le plus bas
-encore ouvert.
+## Les soirées à lieu secret
 
-## Ce qu'elle envoie
+Shotgun floute sa carte : l'extension la rend lisible. Elle affiche le point que
+le site publie déjà, sans prétendre que c'est celui de la soirée, et le signale
+quand ce point n'en dit pas plus que la ville.
 
-Rien à personne. Elle lit les données que le serveur envoie déjà à chaque
-visiteur, et sa seule requête va sur shotgun.live, pour l'agenda d'une ville
-quand tu ouvres la vue. Aucun appel à un tiers, aucune requête au chargement
-d'une page.
+## Vie privée
 
-## Limites
-
-Les transformations des pages d'événement reposent sur le balisage de Shotgun,
-qu'aucun attribut stable ne désigne : titre, bloc d'infos, affiche, cases de
-billets, carte, line-up, organisateurs. Un changement de gabarit chez eux
-cassera ce qu'on voit, pas un bonus discret.
-
-Chaque transformation est isolée et annulable : l'échec de l'une n'empêche pas
-les autres, et le démontage restaure les styles d'origine. L'hydratation de
-Shotgun échoue sur certaines fiches et fait re-rendre toute la page ; dans ce
-cas la passe est reposée, quatre fois au plus.
+Elle lit ce que le site envoie déjà à ton navigateur. Rien n'est transmis, aucun
+service tiers contacté, rien enregistré sur toi.
 
 <img width="1884" height="50%" alt="image" src="https://github.com/user-attachments/assets/102caded-2a1e-49fc-b9f2-ebd2b65c5aae" />
 
@@ -82,5 +58,10 @@ cas la passe est reposée, quatre fois au plus.
 2. Ouvre `chrome://extensions` et active le **Mode développeur**.
 3. **Charger l'extension non empaquetée**, puis choisis le dossier.
 
-Après chaque rechargement de l'extension, recharge aussi les onglets Shotgun
-ouverts : Chrome n'injecte ses scripts qu'au chargement d'une page.
+Après un rechargement de l'extension, recharge aussi les onglets Shotgun
+ouverts.
+
+## Si rien ne s'affiche
+
+Recharge la page. L'extension suit la mise en page de Shotgun ; en cas de
+refonte du site, une mise à jour sera nécessaire.
