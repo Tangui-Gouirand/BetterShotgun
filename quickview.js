@@ -5,7 +5,7 @@
   // Estampille de version : un rechargement d'extension laisse dans la page
   // l'état de la version d'avant, dont la forme peut différer. À version
   // différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.7.2';
+  const VERSION = '1.7.3';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -646,7 +646,9 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
     }
 
     function visible() {
-      const out = state.all.filter(matches);
+      // Surtout pas `filter(matches)` : `filter` passe l'index en second
+      // argument, que `matches` prend pour l'ordre de sauter le filtre de prix.
+      const out = state.all.filter((ev) => matches(ev));
       // Sans prix, pas de place naturelle dans un tri par prix : en fin de liste.
       if (state.sort === 'price') {
         out.sort((a, b) => (a.price === null) - (b.price === null) ||
