@@ -5,7 +5,7 @@
   // Estampille de version : un rechargement d'extension laisse dans la page
   // l'état de la version d'avant, dont la forme peut différer. À version
   // différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.6.1';
+  const VERSION = '1.7.0';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -79,6 +79,8 @@ button { cursor: pointer; background: none; border: none; }
     grid: ['M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M3 14h7v7H3z', 'M14 14h7v7h-7z'],
     plus: ['M12 5v14', 'M5 12h14'],
     minus: ['M5 12h14'],
+    sliders: ['M4 21v-7', 'M4 10V3', 'M12 21v-9', 'M12 8V3', 'M20 21v-5', 'M20 12V3',
+      'M1 14h6', 'M9 8h6', 'M17 16h6'],
     close: ['M18 6 6 18', 'm6 6 12 12'],
     search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z', 'm21 21-4.3-4.3'],
     copy: ['M9 9h10v12H9z', 'M5 15H4V3h12v1'],
@@ -360,6 +362,15 @@ header { flex: 0 0 auto; padding: 16px 24px 0; border-bottom: 1px solid var(--li
 .brand em { color: var(--accent); font-style: normal; }
 .count { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .spacer { flex: 1; }
+.filters { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px;
+  border-radius: var(--rb); background: var(--fill); color: var(--fg);
+  font-size: 12px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; }
+.filters:hover { background: rgba(255, 255, 255, .18); }
+.filters.on { background: var(--accent); color: #1c1c1c; }
+.filters .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--accent); color: #1c1c1c; font-size: 11px; line-height: 18px;
+  text-align: center; }
+.filters.on .badge { background: #1c1c1c; color: var(--accent); }
 .close { width: 44px; height: 44px; border-radius: var(--rb); color: var(--muted);
   display: grid; place-items: center; }
 .close:hover { background: var(--fill); color: var(--fg); }
@@ -499,6 +510,44 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
   animation: pulse 1.3s ease-in-out infinite; margin-bottom: 10px; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+
+/* Écrans étroits : moins de marges, moins de colonnes, et on laisse tomber
+   ce qui ne survit pas à la largeur — genres, raccourci clavier, salle. */
+@media (max-width: 900px) {
+  header { padding: 12px 14px 0; }
+  main { padding: 0 14px 40px; }
+  .top { flex-wrap: wrap; gap: 10px; }
+  .brand { font-size: 16px; }
+  .count { font-size: 12px; }
+  .search { margin: 12px 0 10px; }
+  .search input { height: 40px; font-size: 14px; padding-left: 38px; }
+  .search .icon { top: 12px; left: 12px; }
+  .kbd { display: none; }
+  .rows { gap: 8px; }
+  .row { gap: 10px; }
+  .day { font-size: 15px; padding-top: 12px; }
+  .picker { width: 100%; }
+  .ev { gap: 10px; padding: 8px 6px; }
+  .ev .g { display: none; }
+  .ev .thumb { width: 54px; height: 34px; }
+  .ev .t { font-size: 15px; }
+  .ev .v { font-size: 13px; }
+  .ev .p { flex-basis: 68px; font-size: 14px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px 10px; }
+  .grid .t { font-size: 13px; }
+  .grid .thumb { width: 100%; height: auto; }
+}
+
+@media (max-width: 560px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); }
+  .grid .v { display: none; }
+  .ev .h { flex-basis: 42px; font-size: 12px; }
+  .filters .lbl { display: none; }
+  .filters { padding: 0 11px; }
+  /* Le compteur passe sous le titre : sur sa ligne, il repoussait les
+     boutons en dessous et gâchait une rangée. */
+  .count { order: 9; flex-basis: 100%; }
+}
 `;
 
   const fmtDay = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -516,6 +565,8 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       view: 'grid',
       cursor: -1,
       loaded: false,
+      // Repliés d'emblée sur un écran étroit, où ils mangeraient tout.
+      filtersOpen: window.innerWidth >= 900,
       // Multi-villes : la sélection, et l'état de chargement de chacune.
       picked: [],
       cityState: new Map(),
@@ -540,7 +591,14 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
     const close = el('button', 'close');
     close.title = 'Fermer (Échap)';
     close.appendChild(icon('close'));
-    top.append(brand, count, el('div', 'spacer'), close);
+
+    const toggle = el('button', 'filters');
+    toggle.addEventListener('click', () => {
+      state.filtersOpen = !state.filtersOpen;
+      buildToolbar();
+    });
+
+    top.append(brand, count, el('div', 'spacer'), toggle, close);
 
     const searchBox = el('div', 'search');
     const search = document.createElement('input');
@@ -751,7 +809,28 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       setTimeout(() => search2.focus(), 0);
     }
 
+    // Repliés, les filtres restent comptés : sinon on cherche longtemps
+    // pourquoi la liste est courte.
+    function activeFilters() {
+      let n = state.genres.size;
+      if (state.when !== 'all') n++;
+      if (state.maxPrice !== null) n++;
+      if (state.hideSold) n++;
+      if (state.picked.length > 1) n += state.picked.length - 1;
+      return n;
+    }
+
     function buildToolbar() {
+      const open = state.filtersOpen;
+      const active = activeFilters();
+      rows.style.display = open ? '' : 'none';
+      toggle.classList.toggle('on', !open && active > 0);
+      toggle.title = open ? 'Replier les filtres' : 'Déplier les filtres';
+      toggle.replaceChildren(icon('sliders'),
+        el('span', 'lbl', 'Filtres'),
+        ...(active ? [el('span', 'badge', String(active))] : []));
+      if (!open) return;
+
       rowWhen.replaceChildren();
 
       if (cityMode) {
