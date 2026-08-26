@@ -24,6 +24,7 @@
 
   /* ------------------------------------------- carte de la page */
 
+  const GHOST_RE = /\u{1F47B}/u;
   const ZOOM_MIN = 9;
   const ZOOM_MAX = 18;
   const ZOOM_DEFAULT = 15;
@@ -52,6 +53,13 @@
     const src0 = img.getAttribute('src');
     undos.push(() => img.setAttribute('src', src0));
     restyle(img, { filter: 'none' }, undos);
+
+    // Sur un lieu secret, Shotgun pose un fantôme par-dessus la carte. Ce n'est
+    // pas le marqueur : l'image renvoyée par l'API en porte déjà un, simple.
+    const ghost = [...document.querySelectorAll('div')].find((n) =>
+      !n.children.length && GHOST_RE.test(n.textContent || '') &&
+      getComputedStyle(n).position === 'absolute');
+    if (ghost) restyle(ghost, { display: 'none' }, undos);
 
     let zoom = ZOOM_DEFAULT;
     function applySrc() {
@@ -148,9 +156,11 @@
       }
     }
 
+    // Sur la largeur, pas sur la hauteur : l'affiche est en `object-cover`,
+    // et la borner en hauteur la rognerait au lieu de la réduire.
     const affiche = [...banner.children]
       .find((c) => c !== col && c.getBoundingClientRect().height > 200);
-    if (affiche) restyle(affiche, { maxHeight: '250px' }, undos);
+    if (affiche) restyle(affiche, { maxWidth: '440px' }, undos);
   }
 
   /* --------------------------------------- enrichissement de la page */
