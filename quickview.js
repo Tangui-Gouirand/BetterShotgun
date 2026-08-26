@@ -5,7 +5,7 @@
   // Estampille de version : un rechargement d'extension laisse dans la page
   // l'état de la version d'avant, dont la forme peut différer. À version
   // différente, on démonte tout et on repart de zéro.
-  const VERSION = '1.7.1';
+  const VERSION = '1.7.2';
 
   let SG = window.__sg;
   if (SG && SG.version !== VERSION) {
@@ -1073,6 +1073,9 @@ main { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 
       s.appendChild(el('div', null,
         'Choisis une ou plusieurs villes pour composer ton agenda.'));
       s.appendChild(chip('Choisir une ville', false, () => {
+        // Le sélecteur vit dans les réglages : les ouvrir aussi, sinon le
+        // bouton ne fait rien de visible quand ils sont repliés.
+        state.filtersOpen = true;
         state.picker = true;
         buildToolbar();
       }, true));
