@@ -121,6 +121,38 @@
     place();
   }
 
+  /* ------------------------------------------------------- bannière */
+
+  // La rangée de tête fait 412 px. Sa hauteur est celle de la plus haute de ses
+  // deux colonnes : tant que le texte dépasse, réduire l'affiche ne rend rien,
+  // et l'inverse aussi. Les deux ne paient qu'ensemble.
+  function compactBanner(undos) {
+    const h1 = document.querySelector('h1');
+    if (!h1) return;
+    const col = h1.parentElement && h1.parentElement.parentElement;
+    const banner = col && col.parentElement;
+    if (!col || !banner) return;
+
+    restyle(h1, { fontSize: '22px', lineHeight: '1.15' }, undos);
+
+    // Chaque fait — date, salle, adresse — occupe une ligne à `py-4`.
+    const infos = [...col.children]
+      .find((c) => /max-w-96/.test(c.getAttribute('class') || ''));
+    if (infos) {
+      restyle(infos, { marginTop: '6px', fontSize: '13px' }, undos);
+      for (const ligne of infos.children) {
+        restyle(ligne, { gap: '10px' }, undos);
+        for (const c of ligne.children) {
+          restyle(c, { paddingTop: '6px', paddingBottom: '6px' }, undos);
+        }
+      }
+    }
+
+    const affiche = [...banner.children]
+      .find((c) => c !== col && c.getBoundingClientRect().height > 200);
+    if (affiche) restyle(affiche, { maxHeight: '250px' }, undos);
+  }
+
   /* --------------------------------------- enrichissement de la page */
 
   // Tout se passe désormais dans la page de Shotgun, sans surface flottante.
@@ -130,6 +162,7 @@
     const undos = [];
     const etapes = [
       ['carte', () => enhanceMap(res, undos)],
+      ['bannière', () => compactBanner(undos)],
       ['billets', () => {
         const u = compactTickets();
         if (u) undos.push(u);
@@ -346,23 +379,34 @@
     if (!list) return null;
 
     const undos = [];
+    restyle(list, { display: 'flex', flexDirection: 'column', gap: '6px' }, undos);
+
     for (const card of list.children) {
       // Un seul appel : deux `restyle` sur le même nœud feraient capturer à la
       // seconde sauvegarde un style déjà modifié.
       const sold = SOLD_RE.test(card.textContent || '');
-      restyle(card, sold ? { padding: '13px 16px', opacity: '.55' }
-        : { padding: '13px 16px' }, undos);
+      restyle(card, sold ? { padding: '9px 12px', opacity: '.55' }
+        : { padding: '9px 12px' }, undos);
+
+      const titre = card.querySelector('h3');
+      if (titre) restyle(titre, { fontSize: '14px' }, undos);
+
+      // La rangée prix + quantité porte un `mt-4` qui creuse la case.
+      const rangee = [...card.querySelectorAll('div')]
+        .find((d) => /\bmt-4\b/.test(d.getAttribute('class') || ''));
+      if (rangee) restyle(rangee, { marginTop: '6px' }, undos);
 
       const desc = card.querySelector('[class*="whitespace-pre-line"]');
-      if (!desc || desc.getBoundingClientRect().height < 48) continue;
+      if (!desc || desc.getBoundingClientRect().height < 24) continue;
 
       let open = false;
       const fold = () => {
         Object.assign(desc.style, open ? {
-          display: '', webkitLineClamp: '', webkitBoxOrient: '', overflow: '', cursor: 'pointer'
+          display: '', webkitLineClamp: '', webkitBoxOrient: '', overflow: '',
+          fontSize: '12px', marginTop: '2px', cursor: 'pointer'
         } : {
-          display: '-webkit-box', webkitLineClamp: '2', webkitBoxOrient: 'vertical',
-          overflow: 'hidden', cursor: 'pointer'
+          display: '-webkit-box', webkitLineClamp: '1', webkitBoxOrient: 'vertical',
+          overflow: 'hidden', fontSize: '12px', marginTop: '2px', cursor: 'pointer'
         });
       };
       const saved = desc.getAttribute('style');
